@@ -1,25 +1,5 @@
-/**
- * DAIRYPULSE — GOOGLE APPS SCRIPT WEB APP BACKEND
- * 
- * Instructions for deployment:
- * 1. Open Google Sheets (create a new spreadsheet or use existing).
- * 2. Click Extensions > Apps Script.
- * 3. Replace all code in Code.gs with this file's contents.
- * 4. Click Run > initializeDatabase (give permissions when prompted).
- * 5. Click Deploy > New deployment:
- *    - Type: Web app
- *    - Description: DairyPulse API v1
- *    - Execute as: Me (your Google account)
- *    - Who has access: Anyone
- * 6. Copy the Web App URL and set it as VITE_API_URL in your .env or Settings.
- */
-
 //*******************************************************
- * DAIRYPULSE - GOOGLE APPS SCRIPT BACKEND
- * Database: Google Sheets
- * Timezone: Africa/Kampala
- *******************************************************/
-
+ 
 const CONFIG = {
   SESSION_DURATION_MS: 30 * 24 * 60 * 60 * 1000,
   SALT: 'DairyPulseSecureUganda2026Salt',
@@ -147,7 +127,7 @@ const SCHEMAS = {
 function doGet(e) {
   return createJsonResponse({
     success: true,
-    message: 'DairyPulse Apps Script API is active.',
+    message: 'DairyPulse Apps Script API is active. Send POST requests with action and sessionToken.',
     timestamp: new Date().toISOString()
   });
 }
@@ -175,9 +155,7 @@ function doPost(e) {
     }
 
 
-    /* ---------------------------------------------
-       PUBLIC ACTIONS
-       --------------------------------------------- */
+    /* PUBLIC ACTIONS */
 
     if (action === 'initializeDatabase') {
       return handleInitializeDatabase();
@@ -192,9 +170,7 @@ function doPost(e) {
     }
 
 
-    /* ---------------------------------------------
-       AUTHENTICATION
-       --------------------------------------------- */
+    /* AUTHENTICATION */
 
     if (!sessionToken) {
       return createJsonResponse({
@@ -216,13 +192,9 @@ function doPost(e) {
     const farmId = cleanString(session.farmId);
 
 
-    /* ---------------------------------------------
-       ROUTING
-       --------------------------------------------- */
+    /* ROUTING */
 
     switch (action) {
-
-      /* AUTH */
 
       case 'validateSession':
         return handleValidateSession(session);
@@ -348,9 +320,11 @@ function doPost(e) {
       success: false,
       message:
         'Server error processing request: ' +
-        (error && error.message
-          ? error.message
-          : String(error))
+        (
+          error && error.message
+            ? error.message
+            : String(error)
+        )
     });
   }
 }
@@ -375,8 +349,10 @@ function normalizeId(value) {
 
 
 function sameId(a, b) {
-  return normalizeId(a) !== '' &&
-         normalizeId(a) === normalizeId(b);
+  const first = normalizeId(a);
+  const second = normalizeId(b);
+
+  return first !== '' && first === second;
 }
 
 
@@ -389,45 +365,147 @@ function todayString() {
 }
 
 
+/*
+ * Safely converts Google Sheets dates, strings,
+ * timestamps and Date objects into yyyy-MM-dd.
+ */
 function dateString(value) {
 
-  if (!value) return '';
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+
+  /* Already a Date object from Google Sheets */
 
   if (
-    typeof value === 'string' &&
-    /^\d{4}-\d{2}-\d{2}$/.test(value.trim())
+    value instanceof Date &&
+    !isNaN(value.getTime())
   ) {
-    return value.trim();
+
+    return Utilities.formatDate(
+      value,
+      CONFIG.TIMEZONE,
+      'yyyy-MM-dd'
+    );
   }
 
-  const date = new Date(value);
 
-  if (isNaN(date.getTime())) {
-    return cleanString(value);
+  const text =
+    String(value).trim();
+
+
+  if (!text) {
+    return '';
   }
 
-  return Utilities.formatDate(
-    date,
-    CONFIG.TIMEZONE,
-    'yyyy-MM-dd'
-  );
+
+  /* Already yyyy-MM-dd */
+
+  if (
+    /^\d{4}-\d{2}-\d{2}$/.test(text)
+  ) {
+    return text;
+  }
+
+
+  /* ISO timestamp */
+
+  if (
+    /^\d{4}-\d{2}-\d{2}T/.test(text)
+  ) {
+
+    const isoDate =
+      new Date(text);
+
+    if (
+      !isNaN(isoDate.getTime())
+    ) {
+
+      return Utilities.formatDate(
+        isoDate,
+        CONFIG.TIMEZONE,
+        'yyyy-MM-dd'
+      );
+    }
+  }
+
+
+  /* Other date strings */
+
+  const parsed =
+    new Date(text);
+
+  if (
+    !isNaN(parsed.getTime())
+  ) {
+
+    return Utilities.formatDate(
+      parsed,
+      CONFIG.TIMEZONE,
+      'yyyy-MM-dd'
+    );
+  }
+
+
+  return text;
+}
+
+
+/*
+ * Safely converts timestamps.
+ */
+function timestampString(value) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '';
+  }
+
+
+  if (
+    value instanceof Date &&
+    !isNaN(value.getTime())
+  ) {
+
+    return value.toISOString();
+  }
+
+
+  return String(value);
 }
 
 
 function parseNumber(value) {
 
-  if (value === null || value === undefined || value === '') {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
     return 0;
   }
 
-  const number = Number(value);
+  const number =
+    Number(value);
 
-  return isNaN(number) ? 0 : number;
+  return isNaN(number)
+    ? 0
+    : number;
 }
 
 
 function round2(value) {
-  return Number(parseNumber(value).toFixed(2));
+  return Number(
+    parseNumber(value).toFixed(2)
+  );
 }
 
 
@@ -452,8 +530,12 @@ function generateId(prefix) {
 function createJsonResponse(data, statusCode) {
 
   return ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
+    .createTextOutput(
+      JSON.stringify(data)
+    )
+    .setMimeType(
+      ContentService.MimeType.JSON
+    );
 }
 
 
@@ -478,7 +560,8 @@ function getSpreadsheet() {
 
 function getOrCreateSheet(sheetName) {
 
-  const ss = getSpreadsheet();
+  const ss =
+    getSpreadsheet();
 
   let sheet =
     ss.getSheetByName(sheetName);
@@ -494,7 +577,12 @@ function getOrCreateSheet(sheetName) {
     if (headers) {
 
       sheet
-        .getRange(1, 1, 1, headers.length)
+        .getRange(
+          1,
+          1,
+          1,
+          headers.length
+        )
         .setValues([headers]);
 
       sheet.setFrozenRows(1);
@@ -507,32 +595,75 @@ function getOrCreateSheet(sheetName) {
 
 function ensureAllSheets() {
 
-  Object.keys(SCHEMAS).forEach(function(sheetName) {
+  Object.keys(SCHEMAS)
+    .forEach(function(sheetName) {
 
-    const sheet =
-      getOrCreateSheet(sheetName);
+      const sheet =
+        getOrCreateSheet(sheetName);
 
-    const headers =
-      SCHEMAS[sheetName];
+      const headers =
+        SCHEMAS[sheetName];
 
-    if (
-      sheet.getLastRow() === 0 ||
-      sheet.getRange(1, 1, 1, headers.length)
-        .getValues()[0]
-        .join('')
-        .trim() === ''
-    ) {
+      if (
+        sheet.getLastRow() === 0
+      ) {
 
-      sheet
-        .getRange(1, 1, 1, headers.length)
-        .setValues([headers]);
+        sheet
+          .getRange(
+            1,
+            1,
+            1,
+            headers.length
+          )
+          .setValues([headers]);
 
-      sheet.setFrozenRows(1);
-    }
-  });
+        sheet.setFrozenRows(1);
+
+        return;
+      }
+
+
+      const firstRow =
+        sheet
+          .getRange(
+            1,
+            1,
+            1,
+            headers.length
+          )
+          .getValues()[0];
+
+
+      if (
+        firstRow
+          .join('')
+          .trim() === ''
+      ) {
+
+        sheet
+          .getRange(
+            1,
+            1,
+            1,
+            headers.length
+          )
+          .setValues([headers]);
+
+        sheet.setFrozenRows(1);
+      }
+    });
 }
 
 
+/*
+ * IMPORTANT FIX:
+ *
+ * Google Sheets returns cells formatted as dates
+ * as JavaScript Date objects.
+ *
+ * This function converts all date fields to
+ * yyyy-MM-dd before the data reaches the frontend.
+ */
 function getRowsAsObjects(sheetName) {
 
   const sheet =
@@ -544,12 +675,14 @@ function getRowsAsObjects(sheetName) {
   const lastColumn =
     sheet.getLastColumn();
 
+
   if (
     lastRow <= 1 ||
     lastColumn === 0
   ) {
     return [];
   }
+
 
   const data =
     sheet
@@ -561,12 +694,43 @@ function getRowsAsObjects(sheetName) {
       )
       .getValues();
 
+
   const headers =
     data[0].map(function(header) {
+
       return cleanString(header);
+
     });
 
+
+  const dateFields = [
+
+    'recordDate',
+
+    'expenseDate',
+
+    'saleDate',
+
+    'dateOfBirth'
+
+  ];
+
+
+  const timestampFields = [
+
+    'createdAt',
+
+    'updatedAt',
+
+    'timestamp',
+
+    'expiresAt'
+
+  ];
+
+
   const rows = [];
+
 
   for (
     let i = 1;
@@ -574,18 +738,28 @@ function getRowsAsObjects(sheetName) {
     i++
   ) {
 
-    const row = data[i];
+    const row =
+      data[i];
+
 
     if (
       !row ||
       row.every(function(cell) {
-        return cleanString(cell) === '';
+
+        return (
+          cell === '' ||
+          cell === null ||
+          cell === undefined
+        );
+
       })
     ) {
       continue;
     }
 
+
     const obj = {};
+
 
     for (
       let j = 0;
@@ -593,30 +767,71 @@ function getRowsAsObjects(sheetName) {
       j++
     ) {
 
-      if (headers[j]) {
-        obj[headers[j]] =
-          row[j] !== undefined
-            ? row[j]
+      const key =
+        headers[j];
+
+
+      if (!key) {
+        continue;
+      }
+
+
+      const value =
+        row[j];
+
+
+      if (
+        dateFields.includes(key)
+      ) {
+
+        obj[key] =
+          dateString(value);
+
+      }
+
+      else if (
+        timestampFields.includes(key)
+      ) {
+
+        obj[key] =
+          timestampString(value);
+
+      }
+
+      else {
+
+        obj[key] =
+          value !== undefined
+            ? value
             : '';
+
       }
     }
 
-    obj._rowIndex = i + 1;
+
+    obj._rowIndex =
+      i + 1;
+
 
     rows.push(obj);
   }
+
 
   return rows;
 }
 
 
-function appendRowObject(sheetName, obj) {
+function appendRowObject(
+  sheetName,
+  obj
+) {
 
   const sheet =
     getOrCreateSheet(sheetName);
 
   const headers =
     SCHEMAS[sheetName];
+
 
   const row =
     headers.map(function(header) {
@@ -630,7 +845,9 @@ function appendRowObject(sheetName, obj) {
       )
         ? ''
         : value;
+
     });
+
 
   sheet.appendRow(row);
 }
@@ -648,20 +865,24 @@ function updateRowObject(
   const headers =
     SCHEMAS[sheetName];
 
-  headers.forEach(function(header, index) {
 
-    if (
-      obj[header] !== undefined
-    ) {
+  headers.forEach(
+    function(header, index) {
 
-      sheet
-        .getRange(
-          rowIndex,
-          index + 1
-        )
-        .setValue(obj[header]);
-    }
-  });
+      if (
+        obj[header] !== undefined
+      ) {
+
+        sheet
+          .getRange(
+            rowIndex,
+            index + 1
+          )
+          .setValue(
+            obj[header]
+          );
+      }
+    });
 }
 
 
@@ -672,6 +893,7 @@ function deleteRowByIndex(
 
   const sheet =
     getOrCreateSheet(sheetName);
+
 
   if (
     rowIndex > 1 &&
@@ -694,18 +916,33 @@ function logActivity(
   description
 ) {
 
-  if (!farmId) return;
+  if (!farmId) {
+    return;
+  }
+
 
   appendRowObject(
     'Activity',
     {
-      activityId: generateId('ACT'),
-      farmId: farmId,
-      userId: userId || '',
-      action: action,
-      description: description,
+
+      activityId:
+        generateId('ACT'),
+
+      farmId:
+        farmId,
+
+      userId:
+        userId || '',
+
+      action:
+        action,
+
+      description:
+        description,
+
       timestamp:
         new Date().toISOString()
+
     }
   );
 }
@@ -718,7 +955,9 @@ function logActivity(
 function hashPassword(password) {
 
   const raw =
-    String(password) + CONFIG.SALT;
+    String(password) +
+    CONFIG.SALT;
+
 
   const digest =
     Utilities.computeDigest(
@@ -727,23 +966,30 @@ function hashPassword(password) {
       Utilities.Charset.UTF_8
     );
 
+
   let hash = '';
 
-  digest.forEach(function(byte) {
 
-    if (byte < 0) {
-      byte += 256;
-    }
+  digest.forEach(
+    function(byte) {
 
-    let hex =
-      byte.toString(16);
+      if (byte < 0) {
+        byte += 256;
+      }
 
-    if (hex.length === 1) {
-      hex = '0' + hex;
-    }
 
-    hash += hex;
-  });
+      let hex =
+        byte.toString(16);
+
+
+      if (hex.length === 1) {
+        hex = '0' + hex;
+      }
+
+
+      hash += hex;
+    });
+
 
   return hash;
 }
@@ -756,29 +1002,39 @@ function validateSessionInternal(
   const token =
     cleanString(sessionToken);
 
+
   if (!token) {
     return null;
   }
 
+
   const sessions =
     getRowsAsObjects('Sessions');
 
-  const session =
-    sessions.find(function(s) {
 
-      return (
-        cleanString(s.sessionToken) ===
-        token
-      );
-    });
+  const session =
+    sessions.find(
+      function(s) {
+
+        return (
+          cleanString(
+            s.sessionToken
+          ) === token
+        );
+
+      });
+
 
   if (!session) {
     return null;
   }
 
+
   const expiresAt =
-    new Date(session.expiresAt)
-      .getTime();
+    new Date(
+      session.expiresAt
+    ).getTime();
+
 
   if (
     isNaN(expiresAt) ||
@@ -787,6 +1043,7 @@ function validateSessionInternal(
 
     return null;
   }
+
 
   return session;
 }
@@ -801,23 +1058,33 @@ function handleInitializeDatabase() {
   const lock =
     LockService.getScriptLock();
 
+
   lock.waitLock(10000);
+
 
   try {
 
     ensureAllSheets();
 
+
     return createJsonResponse({
-      success: true,
+
+      success:
+        true,
+
       message:
         'DairyPulse database initialized successfully.',
+
       sheets:
         Object.keys(SCHEMAS)
+
     });
+
 
   } finally {
 
     lock.releaseLock();
+
   }
 }
 
@@ -831,12 +1098,15 @@ function handleSignup(data) {
   const fullName =
     cleanString(data.fullName);
 
+
   const email =
     cleanString(data.email)
       .toLowerCase();
 
+
   const password =
     cleanString(data.password);
+
 
   if (
     !fullName ||
@@ -845,65 +1115,104 @@ function handleSignup(data) {
   ) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Full name, email and password are required.'
+
     });
   }
+
 
   const lock =
     LockService.getScriptLock();
 
+
   lock.waitLock(10000);
+
 
   try {
 
     const users =
       getRowsAsObjects('Users');
 
-    const existing =
-      users.find(function(user) {
 
-        return (
-          cleanString(user.email)
-            .toLowerCase() === email
-        );
-      });
+    const existing =
+      users.find(
+        function(user) {
+
+          return (
+            cleanString(user.email)
+              .toLowerCase() ===
+            email
+          );
+
+        });
+
 
     if (existing) {
 
       return createJsonResponse({
-        success: false,
+
+        success:
+          false,
+
         message:
           'An account with this email already exists.'
+
       });
     }
+
 
     const userId =
       generateId('USR');
 
+
     const now =
       new Date().toISOString();
+
 
     const passwordHash =
       hashPassword(password);
 
+
     appendRowObject(
       'Users',
       {
-        userId: userId,
-        fullName: fullName,
-        email: email,
-        passwordHash: passwordHash,
-        farmId: '',
-        createdAt: now,
-        updatedAt: now,
-        status: 'active'
+
+        userId:
+          userId,
+
+        fullName:
+          fullName,
+
+        email:
+          email,
+
+        passwordHash:
+          passwordHash,
+
+        farmId:
+          '',
+
+        createdAt:
+          now,
+
+        updatedAt:
+          now,
+
+        status:
+          'active'
+
       }
     );
 
+
     const sessionToken =
       generateId('SES');
+
 
     const expiresAt =
       new Date(
@@ -911,9 +1220,11 @@ function handleSignup(data) {
         CONFIG.SESSION_DURATION_MS
       ).toISOString();
 
+
     appendRowObject(
       'Sessions',
       {
+
         sessionToken:
           sessionToken,
 
@@ -928,32 +1239,52 @@ function handleSignup(data) {
 
         createdAt:
           now
+
       }
     );
 
+
     return createJsonResponse({
-      success: true,
+
+      success:
+        true,
 
       sessionToken:
         sessionToken,
 
       data: {
+
         user: {
-          userId: userId,
-          fullName: fullName,
-          email: email,
-          farmId: null,
-          status: 'active'
+
+          userId:
+            userId,
+
+          fullName:
+            fullName,
+
+          email:
+            email,
+
+          farmId:
+            null,
+
+          status:
+            'active'
+
         }
+
       },
 
       message:
         'Account created successfully.'
+
     });
+
 
   } finally {
 
     lock.releaseLock();
+
   }
 }
 
@@ -968,43 +1299,67 @@ function handleLogin(data) {
     cleanString(data.email)
       .toLowerCase();
 
+
   const password =
     cleanString(data.password);
 
-  if (!email || !password) {
+
+  if (
+    !email ||
+    !password
+  ) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Email and password are required.'
+
     });
   }
+
 
   const passwordHash =
     hashPassword(password);
 
+
   const users =
     getRowsAsObjects('Users');
 
-  const user =
-    users.find(function(u) {
 
-      return (
-        cleanString(u.email)
-          .toLowerCase() === email &&
-        cleanString(u.passwordHash) ===
+  const user =
+    users.find(
+      function(u) {
+
+        return (
+
+          cleanString(u.email)
+            .toLowerCase() ===
+          email &&
+
+          cleanString(u.passwordHash) ===
           passwordHash
-      );
-    });
+
+        );
+
+      });
+
 
   if (!user) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Invalid email or password.'
+
     });
   }
+
 
   if (
     cleanString(user.status) !==
@@ -1012,17 +1367,24 @@ function handleLogin(data) {
   ) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Account is deactivated.'
+
     });
   }
+
 
   const sessionToken =
     generateId('SES');
 
+
   const now =
     new Date().toISOString();
+
 
   const expiresAt =
     new Date(
@@ -1030,9 +1392,11 @@ function handleLogin(data) {
       CONFIG.SESSION_DURATION_MS
     ).toISOString();
 
+
   appendRowObject(
     'Sessions',
     {
+
       sessionToken:
         sessionToken,
 
@@ -1047,17 +1411,23 @@ function handleLogin(data) {
 
       createdAt:
         now
+
     }
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
 
     sessionToken:
       sessionToken,
 
     data: {
+
       user: {
+
         userId:
           cleanString(user.userId),
 
@@ -1073,11 +1443,14 @@ function handleLogin(data) {
 
         status:
           cleanString(user.status)
+
       }
+
     },
 
     message:
       'Login successful.'
+
   });
 }
 
@@ -1086,51 +1459,71 @@ function handleLogin(data) {
    SESSION
    ===================================================== */
 
-function handleValidateSession(session) {
+function handleValidateSession(
+  session
+) {
 
   const users =
     getRowsAsObjects('Users');
 
-  const user =
-    users.find(function(u) {
 
-      return sameId(
-        u.userId,
-        session.userId
-      );
-    });
+  const user =
+    users.find(
+      function(u) {
+
+        return sameId(
+          u.userId,
+          session.userId
+        );
+
+      });
+
 
   if (!user) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'User not found.'
+
     });
   }
 
+
   let farm = null;
+
 
   if (user.farmId) {
 
     const farms =
       getRowsAsObjects('Farms');
 
-    farm =
-      farms.find(function(f) {
 
-        return sameId(
-          f.farmId,
-          user.farmId
-        );
-      }) || null;
+    farm =
+      farms.find(
+        function(f) {
+
+          return sameId(
+            f.farmId,
+            user.farmId
+          );
+
+        }) || null;
   }
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
 
     data: {
+
       user: {
+
         userId:
           cleanString(user.userId),
 
@@ -1146,41 +1539,59 @@ function handleValidateSession(session) {
 
         status:
           cleanString(user.status)
+
       },
 
-      farm: farm
+      farm:
+        farm
+
     }
+
   });
 }
 
 
-function handleGetCurrentUser(userId) {
+function handleGetCurrentUser(
+  userId
+) {
 
   const users =
     getRowsAsObjects('Users');
 
-  const user =
-    users.find(function(u) {
 
-      return sameId(
-        u.userId,
-        userId
-      );
-    });
+  const user =
+    users.find(
+      function(u) {
+
+        return sameId(
+          u.userId,
+          userId
+        );
+
+      });
+
 
   if (!user) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'User not found.'
+
     });
   }
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
 
     data: {
+
       userId:
         cleanString(user.userId),
 
@@ -1193,24 +1604,32 @@ function handleGetCurrentUser(userId) {
       farmId:
         cleanString(user.farmId) ||
         null
+
     }
+
   });
 }
 
 
-function handleLogout(sessionToken) {
+function handleLogout(
+  sessionToken
+) {
 
   const sessions =
     getRowsAsObjects('Sessions');
 
-  const session =
-    sessions.find(function(s) {
 
-      return (
-        cleanString(s.sessionToken) ===
-        cleanString(sessionToken)
-      );
-    });
+  const session =
+    sessions.find(
+      function(s) {
+
+        return (
+          cleanString(s.sessionToken) ===
+          cleanString(sessionToken)
+        );
+
+      });
+
 
   if (
     session &&
@@ -1223,10 +1642,15 @@ function handleLogout(sessionToken) {
     );
   }
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Logged out successfully.'
+
   });
 }
 
@@ -1235,31 +1659,48 @@ function handleLogout(sessionToken) {
    FARM
    ===================================================== */
 
-function handleGetFarm(farmId) {
+function handleGetFarm(
+  farmId
+) {
 
   if (!farmId) {
 
     return createJsonResponse({
-      success: true,
-      data: null
+
+      success:
+        true,
+
+      data:
+        null
+
     });
   }
+
 
   const farms =
     getRowsAsObjects('Farms');
 
-  const farm =
-    farms.find(function(f) {
 
-      return sameId(
-        f.farmId,
-        farmId
-      );
-    }) || null;
+  const farm =
+    farms.find(
+      function(f) {
+
+        return sameId(
+          f.farmId,
+          farmId
+        );
+
+      }) || null;
+
 
   return createJsonResponse({
-    success: true,
-    data: farm
+
+    success:
+      true,
+
+    data:
+      farm
+
   });
 }
 
@@ -1273,32 +1714,47 @@ function handleCreateFarm(
   const farmName =
     cleanString(data.farmName);
 
+
   const location =
     cleanString(data.location);
 
-  if (!farmName || !location) {
+
+  if (
+    !farmName ||
+    !location
+  ) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Farm name and location are required.'
+
     });
   }
+
 
   const lock =
     LockService.getScriptLock();
 
+
   lock.waitLock(10000);
+
 
   try {
 
     const farmId =
       generateId('FARM');
 
+
     const now =
       new Date().toISOString();
 
+
     const newFarm = {
+
       farmId:
         farmId,
 
@@ -1318,33 +1774,42 @@ function handleCreateFarm(
         0,
 
       mainMilkBuyer:
-        cleanString(data.mainMilkBuyer),
+        cleanString(
+          data.mainMilkBuyer
+        ),
 
       createdAt:
         now,
 
       updatedAt:
         now
+
     };
+
 
     appendRowObject(
       'Farms',
       newFarm
     );
 
-    /* Update user */
+
+    /* UPDATE USER */
 
     const users =
       getRowsAsObjects('Users');
 
-    const user =
-      users.find(function(u) {
 
-        return sameId(
-          u.userId,
-          userId
-        );
-      });
+    const user =
+      users.find(
+        function(u) {
+
+          return sameId(
+            u.userId,
+            userId
+          );
+
+        });
+
 
     if (
       user &&
@@ -1355,28 +1820,39 @@ function handleCreateFarm(
         'Users',
         user._rowIndex,
         {
+
           farmId:
             farmId,
 
           updatedAt:
             now
+
         }
       );
     }
 
-    /* Update current session */
+
+    /* UPDATE SESSION */
 
     const sessions =
       getRowsAsObjects('Sessions');
 
-    const session =
-      sessions.find(function(s) {
 
-        return (
-          cleanString(s.sessionToken) ===
-          cleanString(sessionToken)
-        );
-      });
+    const session =
+      sessions.find(
+        function(s) {
+
+          return (
+            cleanString(
+              s.sessionToken
+            ) ===
+            cleanString(
+              sessionToken
+            )
+          );
+
+        });
+
 
     if (
       session &&
@@ -1387,11 +1863,14 @@ function handleCreateFarm(
         'Sessions',
         session._rowIndex,
         {
+
           farmId:
             farmId
+
         }
       );
     }
+
 
     logActivity(
       farmId,
@@ -1403,16 +1882,25 @@ function handleCreateFarm(
         location
     );
 
+
     return createJsonResponse({
-      success: true,
-      data: newFarm,
+
+      success:
+        true,
+
+      data:
+        newFarm,
+
       message:
         'Farm created successfully.'
+
     });
+
 
   } finally {
 
     lock.releaseLock();
+
   }
 }
 
@@ -1425,65 +1913,96 @@ function handleUpdateFarm(
   if (!farmId) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'No farm associated with this account.'
+
     });
   }
+
 
   const farms =
     getRowsAsObjects('Farms');
 
-  const farm =
-    farms.find(function(f) {
 
-      return sameId(
-        f.farmId,
-        farmId
-      );
-    });
+  const farm =
+    farms.find(
+      function(f) {
+
+        return sameId(
+          f.farmId,
+          farmId
+        );
+
+      });
+
 
   if (!farm) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Farm not found.'
+
     });
   }
 
+
   const updates = {
+
     updatedAt:
       new Date().toISOString()
+
   };
+
 
   if (
     data.farmName !== undefined
   ) {
+
     updates.farmName =
-      cleanString(data.farmName);
+      cleanString(
+        data.farmName
+      );
   }
+
 
   if (
     data.location !== undefined
   ) {
+
     updates.location =
-      cleanString(data.location);
+      cleanString(
+        data.location
+      );
   }
+
 
   if (
     data.mainMilkBuyer !== undefined
   ) {
+
     updates.mainMilkBuyer =
-      cleanString(data.mainMilkBuyer);
+      cleanString(
+        data.mainMilkBuyer
+      );
   }
+
 
   if (
     data.farmPhotoUrl !== undefined
   ) {
+
     updates.farmPhotoUrl =
       data.farmPhotoUrl;
   }
+
 
   updateRowObject(
     'Farms',
@@ -1491,10 +2010,15 @@ function handleUpdateFarm(
     updates
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Farm profile updated successfully.'
+
   });
 }
 
@@ -1503,39 +2027,70 @@ function handleUpdateFarm(
    COWS
    ===================================================== */
 
-function handleGetCows(farmId) {
+function handleGetCows(
+  farmId
+) {
 
   if (!farmId) {
 
     return createJsonResponse({
-      success: true,
-      data: []
+
+      success:
+        true,
+
+      data:
+        []
+
     });
   }
 
+
   const cows =
     getRowsAsObjects('Cows')
-      .filter(function(cow) {
+      .filter(
+        function(cow) {
 
-        return sameId(
-          cow.farmId,
-          farmId
-        );
-      })
-      .map(function(cow) {
+          return sameId(
+            cow.farmId,
+            farmId
+          );
 
-        return {
-          ...cow,
-          farmId:
-            cleanString(cow.farmId),
-          cowId:
-            cleanString(cow.cowId)
-        };
-      });
+        })
+      .map(
+        function(cow) {
+
+          return {
+
+            ...cow,
+
+            cowId:
+              cleanString(
+                cow.cowId
+              ),
+
+            farmId:
+              cleanString(
+                cow.farmId
+              ),
+
+            dateOfBirth:
+              dateString(
+                cow.dateOfBirth
+              )
+
+          };
+
+        });
+
 
   return createJsonResponse({
-    success: true,
-    data: cows
+
+    success:
+      true,
+
+    data:
+      cows
+
   });
 }
 
@@ -1549,69 +2104,99 @@ function handleCreateCow(
   if (!farmId) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'No farm is associated with this account.'
+
     });
   }
 
+
   const cowNumber =
-    cleanString(data.cowNumber);
+    cleanString(
+      data.cowNumber
+    );
+
 
   if (!cowNumber) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Cow number/tag is required.'
+
     });
   }
+
 
   const lock =
     LockService.getScriptLock();
 
+
   lock.waitLock(10000);
+
 
   try {
 
     const cows =
       getRowsAsObjects('Cows');
 
-    const existing =
-      cows.filter(function(cow) {
 
-        return sameId(
-          cow.farmId,
-          farmId
-        );
-      });
+    const existing =
+      cows.filter(
+        function(cow) {
+
+          return sameId(
+            cow.farmId,
+            farmId
+          );
+
+        });
+
 
     const duplicate =
-      existing.some(function(cow) {
+      existing.some(
+        function(cow) {
 
-        return (
-          cleanString(cow.cowNumber)
-            .toLowerCase() ===
-          cowNumber.toLowerCase()
-        );
-      });
+          return (
+            cleanString(
+              cow.cowNumber
+            ).toLowerCase() ===
+            cowNumber.toLowerCase()
+          );
+
+        });
+
 
     if (duplicate) {
 
       return createJsonResponse({
-        success: false,
+
+        success:
+          false,
+
         message:
           'Cow with tag "' +
           cowNumber +
           '" already exists.'
+
       });
     }
+
 
     const cowId =
       generateId('COW');
 
+
     const now =
       new Date().toISOString();
+
 
     const newCow = {
 
@@ -1625,48 +2210,65 @@ function handleCreateCow(
         cowNumber,
 
       name:
-        cleanString(data.name),
+        cleanString(
+          data.name
+        ),
 
       breed:
-        cleanString(data.breed) ||
+        cleanString(
+          data.breed
+        ) ||
         'Friesian',
 
       dateOfBirth:
-        data.dateOfBirth || '',
+        dateString(
+          data.dateOfBirth
+        ),
 
       status:
-        cleanString(data.status) ||
+        cleanString(
+          data.status
+        ) ||
         'Lactating',
 
       photoUrl:
         data.photoUrl || '',
 
       notes:
-        cleanString(data.notes),
+        cleanString(
+          data.notes
+        ),
 
       createdAt:
         now,
 
       updatedAt:
         now
+
     };
+
 
     appendRowObject(
       'Cows',
       newCow
     );
 
+
     const farms =
       getRowsAsObjects('Farms');
 
-    const farm =
-      farms.find(function(f) {
 
-        return sameId(
-          f.farmId,
-          farmId
-        );
-      });
+    const farm =
+      farms.find(
+        function(f) {
+
+          return sameId(
+            f.farmId,
+            farmId
+          );
+
+        });
+
 
     if (
       farm &&
@@ -1677,14 +2279,17 @@ function handleCreateCow(
         'Farms',
         farm._rowIndex,
         {
+
           cowCount:
             existing.length + 1,
 
           updatedAt:
             now
+
         }
       );
     }
+
 
     logActivity(
       farmId,
@@ -1694,16 +2299,25 @@ function handleCreateCow(
         cowNumber
     );
 
+
     return createJsonResponse({
-      success: true,
-      data: newCow,
+
+      success:
+        true,
+
+      data:
+        newCow,
+
       message:
         'Cow added successfully.'
+
     });
+
 
   } finally {
 
     lock.releaseLock();
+
   }
 }
 
@@ -1715,91 +2329,143 @@ function handleUpdateCow(
 ) {
 
   const cowId =
-    cleanString(data.cowId);
+    cleanString(
+      data.cowId
+    );
+
 
   if (!cowId) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'cowId is required.'
+
     });
   }
+
 
   const cows =
     getRowsAsObjects('Cows');
 
-  const cow =
-    cows.find(function(c) {
 
-      return (
-        sameId(c.cowId, cowId) &&
-        sameId(c.farmId, farmId)
-      );
-    });
+  const cow =
+    cows.find(
+      function(c) {
+
+        return (
+          sameId(
+            c.cowId,
+            cowId
+          ) &&
+          sameId(
+            c.farmId,
+            farmId
+          )
+        );
+
+      });
+
 
   if (!cow) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Cow not found.'
+
     });
   }
 
+
   const updates = {
+
     updatedAt:
       new Date().toISOString()
+
   };
+
 
   if (
     data.cowNumber !== undefined
   ) {
+
     updates.cowNumber =
-      cleanString(data.cowNumber);
+      cleanString(
+        data.cowNumber
+      );
   }
+
 
   if (
     data.name !== undefined
   ) {
+
     updates.name =
-      cleanString(data.name);
+      cleanString(
+        data.name
+      );
   }
+
 
   if (
     data.breed !== undefined
   ) {
+
     updates.breed =
-      cleanString(data.breed);
+      cleanString(
+        data.breed
+      );
   }
+
 
   if (
     data.dateOfBirth !== undefined
   ) {
+
     updates.dateOfBirth =
-      data.dateOfBirth;
+      dateString(
+        data.dateOfBirth
+      );
   }
+
 
   if (
     data.status !== undefined
   ) {
+
     updates.status =
-      cleanString(data.status);
+      cleanString(
+        data.status
+      );
   }
+
 
   if (
     data.photoUrl !== undefined
   ) {
+
     updates.photoUrl =
       data.photoUrl;
   }
 
+
   if (
     data.notes !== undefined
   ) {
+
     updates.notes =
-      cleanString(data.notes);
+      cleanString(
+        data.notes
+      );
   }
+
 
   updateRowObject(
     'Cows',
@@ -1807,19 +2473,27 @@ function handleUpdateCow(
     updates
   );
 
+
   logActivity(
     farmId,
     userId,
     'Cow Updated',
     'Updated cow #' +
-      (updates.cowNumber ||
-        cow.cowNumber)
+      (
+        updates.cowNumber ||
+        cow.cowNumber
+      )
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Cow updated successfully.'
+
   });
 }
 
@@ -1833,61 +2507,96 @@ function handleDeleteCow(
   cowId =
     cleanString(cowId);
 
+
   if (!cowId) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'cowId is required.'
+
     });
   }
+
 
   const cows =
     getRowsAsObjects('Cows');
 
-  const cow =
-    cows.find(function(c) {
 
-      return (
-        sameId(c.cowId, cowId) &&
-        sameId(c.farmId, farmId)
-      );
-    });
+  const cow =
+    cows.find(
+      function(c) {
+
+        return (
+          sameId(
+            c.cowId,
+            cowId
+          ) &&
+          sameId(
+            c.farmId,
+            farmId
+          )
+        );
+
+      });
+
 
   if (!cow) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Cow not found.'
+
     });
   }
+
 
   deleteRowByIndex(
     'Cows',
     cow._rowIndex
   );
 
-  const remaining =
-    cows.filter(function(c) {
 
-      return (
-        sameId(c.farmId, farmId) &&
-        !sameId(c.cowId, cowId)
-      );
-    }).length;
+  const remaining =
+    cows.filter(
+      function(c) {
+
+        return (
+          sameId(
+            c.farmId,
+            farmId
+          ) &&
+          !sameId(
+            c.cowId,
+            cowId
+          )
+        );
+
+      }).length;
+
 
   const farms =
     getRowsAsObjects('Farms');
 
-  const farm =
-    farms.find(function(f) {
 
-      return sameId(
-        f.farmId,
-        farmId
-      );
-    });
+  const farm =
+    farms.find(
+      function(f) {
+
+        return sameId(
+          f.farmId,
+          farmId
+        );
+
+      });
+
 
   if (
     farm &&
@@ -1898,14 +2607,17 @@ function handleDeleteCow(
       'Farms',
       farm._rowIndex,
       {
+
         cowCount:
           remaining,
 
         updatedAt:
           new Date().toISOString()
+
       }
     );
   }
+
 
   logActivity(
     farmId,
@@ -1915,10 +2627,15 @@ function handleDeleteCow(
       cow.cowNumber
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Cow deleted successfully.'
+
   });
 }
 
@@ -1927,75 +2644,114 @@ function handleDeleteCow(
    MILK
    ===================================================== */
 
-function handleGetMilkRecords(farmId) {
+function handleGetMilkRecords(
+  farmId
+) {
 
   if (!farmId) {
 
     return createJsonResponse({
-      success: true,
-      data: []
+
+      success:
+        true,
+
+      data:
+        []
+
     });
   }
 
+
   const records =
     getRowsAsObjects('MilkRecords')
-      .filter(function(record) {
+      .filter(
+        function(record) {
 
-        return sameId(
-          record.farmId,
-          farmId
-        );
-      })
-      .map(function(record) {
-
-        const morning =
-          parseNumber(
-            record.morningLitres
+          return sameId(
+            record.farmId,
+            farmId
           );
 
-        const evening =
-          parseNumber(
-            record.eveningLitres
-          );
+        })
+      .map(
+        function(record) {
 
-        return {
-          ...record,
+          const morning =
+            parseNumber(
+              record.morningLitres
+            );
 
-          recordId:
-            cleanString(record.recordId),
 
-          farmId:
-            cleanString(record.farmId),
+          const evening =
+            parseNumber(
+              record.eveningLitres
+            );
 
-          recordDate:
-            dateString(record.recordDate),
 
-          morningLitres:
-            morning,
+          return {
 
-          eveningLitres:
-            evening,
+            ...record,
 
-          totalLitres:
-            round2(
-              record.totalLitres !== ''
-                ? parseNumber(record.totalLitres)
-                : morning + evening
+            recordId:
+              cleanString(
+                record.recordId
+              ),
+
+            farmId:
+              cleanString(
+                record.farmId
+              ),
+
+            recordDate:
+              dateString(
+                record.recordDate
+              ),
+
+            morningLitres:
+              morning,
+
+            eveningLitres:
+              evening,
+
+            totalLitres:
+              round2(
+                record.totalLitres !== '' &&
+                record.totalLitres !== null &&
+                record.totalLitres !== undefined
+                  ? parseNumber(
+                      record.totalLitres
+                    )
+                  : morning + evening
+              )
+
+          };
+
+        })
+      .sort(
+        function(a, b) {
+
+          return String(
+            b.recordDate || ''
+          ).localeCompare(
+            String(
+              a.recordDate || ''
             )
-        };
-      })
-      .sort(function(a, b) {
+          );
 
-        return (
-          b.recordDate.localeCompare(
-            a.recordDate
-          )
-        );
-      });
+        });
+
 
   return createJsonResponse({
-    success: true,
-    data: records
+
+    success:
+      true,
+
+    data:
+      records,
+
+    count:
+      records.length
+
   });
 }
 
@@ -2009,44 +2765,69 @@ function handleCreateMilkRecord(
   if (!farmId) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'No farm is associated with this account.'
+
     });
   }
 
+
   const recordDate =
-    dateString(data.recordDate);
+    dateString(
+      data.recordDate
+    );
+
 
   if (!recordDate) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'recordDate is required.'
+
     });
   }
+
 
   const morning =
     Math.max(
       0,
-      parseNumber(data.morningLitres)
+      parseNumber(
+        data.morningLitres
+      )
     );
+
 
   const evening =
     Math.max(
       0,
-      parseNumber(data.eveningLitres)
+      parseNumber(
+        data.eveningLitres
+      )
     );
 
+
   const total =
-    round2(morning + evening);
+    round2(
+      morning +
+      evening
+    );
+
 
   const recordId =
     generateId('MILK');
 
+
   const now =
     new Date().toISOString();
+
 
   const newRecord = {
 
@@ -2069,7 +2850,9 @@ function handleCreateMilkRecord(
       total,
 
     notes:
-      cleanString(data.notes),
+      cleanString(
+        data.notes
+      ),
 
     createdBy:
       userId,
@@ -2079,12 +2862,15 @@ function handleCreateMilkRecord(
 
     updatedAt:
       now
+
   };
+
 
   appendRowObject(
     'MilkRecords',
     newRecord
   );
+
 
   logActivity(
     farmId,
@@ -2096,11 +2882,18 @@ function handleCreateMilkRecord(
       recordDate
   );
 
+
   return createJsonResponse({
-    success: true,
-    data: newRecord,
+
+    success:
+      true,
+
+    data:
+      newRecord,
+
     message:
       'Milk record saved.'
+
   });
 }
 
@@ -2112,37 +2905,60 @@ function handleUpdateMilkRecord(
 ) {
 
   const recordId =
-    cleanString(data.recordId);
+    cleanString(
+      data.recordId
+    );
+
 
   if (!recordId) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'recordId is required.'
+
     });
   }
+
 
   const records =
     getRowsAsObjects('MilkRecords');
 
-  const record =
-    records.find(function(r) {
 
-      return (
-        sameId(r.recordId, recordId) &&
-        sameId(r.farmId, farmId)
-      );
-    });
+  const record =
+    records.find(
+      function(r) {
+
+        return (
+          sameId(
+            r.recordId,
+            recordId
+          ) &&
+          sameId(
+            r.farmId,
+            farmId
+          )
+        );
+
+      });
+
 
   if (!record) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Milk record not found.'
+
     });
   }
+
 
   const morning =
     data.morningLitres !== undefined
@@ -2156,6 +2972,7 @@ function handleUpdateMilkRecord(
           record.morningLitres
         );
 
+
   const evening =
     data.eveningLitres !== undefined
       ? Math.max(
@@ -2168,6 +2985,7 @@ function handleUpdateMilkRecord(
           record.eveningLitres
         );
 
+
   const updates = {
 
     morningLitres:
@@ -2177,33 +2995,45 @@ function handleUpdateMilkRecord(
       evening,
 
     totalLitres:
-      round2(morning + evening),
+      round2(
+        morning +
+        evening
+      ),
 
     updatedAt:
       new Date().toISOString()
+
   };
+
 
   if (
     data.recordDate !== undefined
   ) {
 
     updates.recordDate =
-      dateString(data.recordDate);
+      dateString(
+        data.recordDate
+      );
   }
+
 
   if (
     data.notes !== undefined
   ) {
 
     updates.notes =
-      cleanString(data.notes);
+      cleanString(
+        data.notes
+      );
   }
+
 
   updateRowObject(
     'MilkRecords',
     record._rowIndex,
     updates
   );
+
 
   logActivity(
     farmId,
@@ -2212,10 +3042,15 @@ function handleUpdateMilkRecord(
     'Updated milk record.'
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Milk record updated.'
+
   });
 }
 
@@ -2227,55 +3062,88 @@ function handleDeleteMilkRecord(
 ) {
 
   recordId =
-    cleanString(recordId);
+    cleanString(
+      recordId
+    );
+
 
   if (!recordId) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'recordId is required.'
+
     });
   }
 
+
   const records =
-    getRowsAsObjects('MilkRecords');
+    getRowsAsObjects(
+      'MilkRecords'
+    );
+
 
   const record =
-    records.find(function(r) {
+    records.find(
+      function(r) {
 
-      return (
-        sameId(r.recordId, recordId) &&
-        sameId(r.farmId, farmId)
-      );
-    });
+        return (
+          sameId(
+            r.recordId,
+            recordId
+          ) &&
+          sameId(
+            r.farmId,
+            farmId
+          )
+        );
+
+      });
+
 
   if (!record) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Milk record not found.'
+
     });
   }
+
 
   deleteRowByIndex(
     'MilkRecords',
     record._rowIndex
   );
 
+
   logActivity(
     farmId,
     userId,
     'Milk Record Deleted',
     'Deleted milk record for ' +
-      dateString(record.recordDate)
+      dateString(
+        record.recordDate
+      )
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Milk record deleted.'
+
   });
 }
 
@@ -2284,55 +3152,90 @@ function handleDeleteMilkRecord(
    EXPENSES
    ===================================================== */
 
-function handleGetExpenses(farmId) {
+function handleGetExpenses(
+  farmId
+) {
 
   if (!farmId) {
 
     return createJsonResponse({
-      success: true,
-      data: []
+
+      success:
+        true,
+
+      data:
+        []
+
     });
   }
 
+
   const expenses =
     getRowsAsObjects('Expenses')
-      .filter(function(expense) {
+      .filter(
+        function(expense) {
 
-        return sameId(
-          expense.farmId,
-          farmId
-        );
-      })
-      .map(function(expense) {
+          return sameId(
+            expense.farmId,
+            farmId
+          );
 
-        return {
-          ...expense,
+        })
+      .map(
+        function(expense) {
 
-          expenseId:
-            cleanString(expense.expenseId),
+          return {
 
-          farmId:
-            cleanString(expense.farmId),
+            ...expense,
 
-          expenseDate:
-            dateString(expense.expenseDate),
+            expenseId:
+              cleanString(
+                expense.expenseId
+              ),
 
-          amount:
-            parseNumber(expense.amount)
-        };
-      })
-      .sort(function(a, b) {
+            farmId:
+              cleanString(
+                expense.farmId
+              ),
 
-        return (
-          b.expenseDate.localeCompare(
-            a.expenseDate
-          )
-        );
-      });
+            expenseDate:
+              dateString(
+                expense.expenseDate
+              ),
+
+            amount:
+              parseNumber(
+                expense.amount
+              )
+
+          };
+
+        })
+      .sort(
+        function(a, b) {
+
+          return String(
+            b.expenseDate || ''
+          ).localeCompare(
+            String(
+              a.expenseDate || ''
+            )
+          );
+
+        });
+
 
   return createJsonResponse({
-    success: true,
-    data: expenses
+
+    success:
+      true,
+
+    data:
+      expenses,
+
+    count:
+      expenses.length
+
   });
 }
 
@@ -2346,20 +3249,34 @@ function handleCreateExpense(
   if (!farmId) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'No farm is associated with this account.'
+
     });
   }
 
+
   const expenseDate =
-    dateString(data.expenseDate);
+    dateString(
+      data.expenseDate
+    );
+
 
   const category =
-    cleanString(data.category);
+    cleanString(
+      data.category
+    );
+
 
   const amount =
-    parseNumber(data.amount);
+    parseNumber(
+      data.amount
+    );
+
 
   if (
     !expenseDate ||
@@ -2368,17 +3285,24 @@ function handleCreateExpense(
   ) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Date, category and a valid amount greater than zero are required.'
+
     });
   }
+
 
   const expenseId =
     generateId('EXP');
 
+
   const now =
     new Date().toISOString();
+
 
   const newExpense = {
 
@@ -2395,13 +3319,17 @@ function handleCreateExpense(
       category,
 
     description:
-      cleanString(data.description),
+      cleanString(
+        data.description
+      ),
 
     amount:
       round2(amount),
 
     notes:
-      cleanString(data.notes),
+      cleanString(
+        data.notes
+      ),
 
     createdBy:
       userId,
@@ -2411,28 +3339,38 @@ function handleCreateExpense(
 
     updatedAt:
       now
+
   };
+
 
   appendRowObject(
     'Expenses',
     newExpense
   );
 
+
   logActivity(
     farmId,
     userId,
     'Expense Added',
     'Recorded UGX ' +
-      amount.toLocaleString() +
+      round2(amount).toLocaleString() +
       ' for ' +
       category
   );
 
+
   return createJsonResponse({
-    success: true,
-    data: newExpense,
+
+    success:
+      true,
+
+    data:
+      newExpense,
+
     message:
       'Expense added successfully.'
+
   });
 }
 
@@ -2444,86 +3382,134 @@ function handleUpdateExpense(
 ) {
 
   const expenseId =
-    cleanString(data.expenseId);
+    cleanString(
+      data.expenseId
+    );
+
 
   if (!expenseId) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'expenseId is required.'
+
     });
   }
 
+
   const expenses =
-    getRowsAsObjects('Expenses');
+    getRowsAsObjects(
+      'Expenses'
+    );
+
 
   const expense =
-    expenses.find(function(e) {
+    expenses.find(
+      function(e) {
 
-      return (
-        sameId(e.expenseId, expenseId) &&
-        sameId(e.farmId, farmId)
-      );
-    });
+        return (
+          sameId(
+            e.expenseId,
+            expenseId
+          ) &&
+          sameId(
+            e.farmId,
+            farmId
+          )
+        );
+
+      });
+
 
   if (!expense) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Expense not found.'
+
     });
   }
+
 
   const updates = {
 
     updatedAt:
       new Date().toISOString()
+
   };
+
 
   if (
     data.expenseDate !== undefined
   ) {
+
     updates.expenseDate =
-      dateString(data.expenseDate);
+      dateString(
+        data.expenseDate
+      );
   }
+
 
   if (
     data.category !== undefined
   ) {
+
     updates.category =
-      cleanString(data.category);
+      cleanString(
+        data.category
+      );
   }
+
 
   if (
     data.description !== undefined
   ) {
+
     updates.description =
-      cleanString(data.description);
+      cleanString(
+        data.description
+      );
   }
+
 
   if (
     data.amount !== undefined
   ) {
+
     updates.amount =
       round2(
-        parseNumber(data.amount)
+        parseNumber(
+          data.amount
+        )
       );
   }
+
 
   if (
     data.notes !== undefined
   ) {
+
     updates.notes =
-      cleanString(data.notes);
+      cleanString(
+        data.notes
+      );
   }
+
 
   updateRowObject(
     'Expenses',
     expense._rowIndex,
     updates
   );
+
 
   logActivity(
     farmId,
@@ -2532,10 +3518,15 @@ function handleUpdateExpense(
     'Updated expense.'
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Expense updated.'
+
   });
 }
 
@@ -2547,33 +3538,54 @@ function handleDeleteExpense(
 ) {
 
   expenseId =
-    cleanString(expenseId);
+    cleanString(
+      expenseId
+    );
+
 
   const expenses =
-    getRowsAsObjects('Expenses');
+    getRowsAsObjects(
+      'Expenses'
+    );
+
 
   const expense =
-    expenses.find(function(e) {
+    expenses.find(
+      function(e) {
 
-      return (
-        sameId(e.expenseId, expenseId) &&
-        sameId(e.farmId, farmId)
-      );
-    });
+        return (
+          sameId(
+            e.expenseId,
+            expenseId
+          ) &&
+          sameId(
+            e.farmId,
+            farmId
+          )
+        );
+
+      });
+
 
   if (!expense) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Expense not found.'
+
     });
   }
+
 
   deleteRowByIndex(
     'Expenses',
     expense._rowIndex
   );
+
 
   logActivity(
     farmId,
@@ -2583,10 +3595,15 @@ function handleDeleteExpense(
       expense.category
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Expense deleted.'
+
   });
 }
 
@@ -2595,29 +3612,80 @@ function handleDeleteExpense(
    BUYERS
    ===================================================== */
 
-function handleGetBuyers(farmId) {
+function handleGetBuyers(
+  farmId
+) {
 
   if (!farmId) {
 
     return createJsonResponse({
-      success: true,
-      data: []
+
+      success:
+        true,
+
+      data:
+        []
+
     });
   }
 
+
   const buyers =
     getRowsAsObjects('Buyers')
-      .filter(function(buyer) {
+      .filter(
+        function(buyer) {
 
-        return sameId(
-          buyer.farmId,
-          farmId
-        );
-      });
+          return sameId(
+            buyer.farmId,
+            farmId
+          );
+
+        })
+      .map(
+        function(buyer) {
+
+          return {
+
+            ...buyer,
+
+            buyerId:
+              cleanString(
+                buyer.buyerId
+              ),
+
+            farmId:
+              cleanString(
+                buyer.farmId
+              ),
+
+            name:
+              cleanString(
+                buyer.name
+              ),
+
+            phone:
+              cleanString(
+                buyer.phone
+              ),
+
+            location:
+              cleanString(
+                buyer.location
+              )
+
+          };
+
+        });
+
 
   return createJsonResponse({
-    success: true,
-    data: buyers
+
+    success:
+      true,
+
+    data:
+      buyers
+
   });
 }
 
@@ -2629,22 +3697,35 @@ function handleCreateBuyer(
 ) {
 
   const name =
-    cleanString(data.name);
+    cleanString(
+      data.name
+    );
 
-  if (!farmId || !name) {
+
+  if (
+    !farmId ||
+    !name
+  ) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Farm and buyer name are required.'
+
     });
   }
+
 
   const buyerId =
     generateId('BUY');
 
+
   const now =
     new Date().toISOString();
+
 
   const newBuyer = {
 
@@ -2658,22 +3739,29 @@ function handleCreateBuyer(
       name,
 
     phone:
-      cleanString(data.phone),
+      cleanString(
+        data.phone
+      ),
 
     location:
-      cleanString(data.location),
+      cleanString(
+        data.location
+      ),
 
     createdAt:
       now,
 
     updatedAt:
       now
+
   };
+
 
   appendRowObject(
     'Buyers',
     newBuyer
   );
+
 
   logActivity(
     farmId,
@@ -2684,11 +3772,18 @@ function handleCreateBuyer(
       '"'
   );
 
+
   return createJsonResponse({
-    success: true,
-    data: newBuyer,
+
+    success:
+      true,
+
+    data:
+      newBuyer,
+
     message:
       'Buyer added successfully.'
+
   });
 }
 
@@ -2700,61 +3795,96 @@ function handleUpdateBuyer(
 ) {
 
   const buyerId =
-    cleanString(data.buyerId);
+    cleanString(
+      data.buyerId
+    );
+
 
   const buyers =
-    getRowsAsObjects('Buyers');
+    getRowsAsObjects(
+      'Buyers'
+    );
+
 
   const buyer =
-    buyers.find(function(b) {
+    buyers.find(
+      function(b) {
 
-      return (
-        sameId(b.buyerId, buyerId) &&
-        sameId(b.farmId, farmId)
-      );
-    });
+        return (
+          sameId(
+            b.buyerId,
+            buyerId
+          ) &&
+          sameId(
+            b.farmId,
+            farmId
+          )
+        );
+
+      });
+
 
   if (!buyer) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Buyer not found.'
+
     });
   }
+
 
   const updates = {
 
     updatedAt:
       new Date().toISOString()
+
   };
+
 
   if (
     data.name !== undefined
   ) {
+
     updates.name =
-      cleanString(data.name);
+      cleanString(
+        data.name
+      );
   }
+
 
   if (
     data.phone !== undefined
   ) {
+
     updates.phone =
-      cleanString(data.phone);
+      cleanString(
+        data.phone
+      );
   }
+
 
   if (
     data.location !== undefined
   ) {
+
     updates.location =
-      cleanString(data.location);
+      cleanString(
+        data.location
+      );
   }
+
 
   updateRowObject(
     'Buyers',
     buyer._rowIndex,
     updates
   );
+
 
   logActivity(
     farmId,
@@ -2763,10 +3893,15 @@ function handleUpdateBuyer(
     'Updated buyer.'
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Buyer updated.'
+
   });
 }
 
@@ -2778,33 +3913,54 @@ function handleDeleteBuyer(
 ) {
 
   buyerId =
-    cleanString(buyerId);
+    cleanString(
+      buyerId
+    );
+
 
   const buyers =
-    getRowsAsObjects('Buyers');
+    getRowsAsObjects(
+      'Buyers'
+    );
+
 
   const buyer =
-    buyers.find(function(b) {
+    buyers.find(
+      function(b) {
 
-      return (
-        sameId(b.buyerId, buyerId) &&
-        sameId(b.farmId, farmId)
-      );
-    });
+        return (
+          sameId(
+            b.buyerId,
+            buyerId
+          ) &&
+          sameId(
+            b.farmId,
+            farmId
+          )
+        );
+
+      });
+
 
   if (!buyer) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Buyer not found.'
+
     });
   }
+
 
   deleteRowByIndex(
     'Buyers',
     buyer._rowIndex
   );
+
 
   logActivity(
     farmId,
@@ -2814,10 +3970,15 @@ function handleDeleteBuyer(
       buyer.name
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Buyer deleted.'
+
   });
 }
 
@@ -2826,105 +3987,154 @@ function handleDeleteBuyer(
    SALES
    ===================================================== */
 
-function handleGetSales(farmId) {
+function handleGetSales(
+  farmId
+) {
 
   if (!farmId) {
 
     return createJsonResponse({
-      success: true,
-      data: []
+
+      success:
+        true,
+
+      data:
+        []
+
     });
   }
 
+
   const buyers =
     getRowsAsObjects('Buyers')
-      .filter(function(buyer) {
+      .filter(
+        function(buyer) {
 
-        return sameId(
-          buyer.farmId,
-          farmId
-        );
-      });
+          return sameId(
+            buyer.farmId,
+            farmId
+          );
+
+        });
+
 
   const buyersMap = {};
 
-  buyers.forEach(function(buyer) {
 
-    buyersMap[
-      cleanString(buyer.buyerId)
-    ] =
-      cleanString(buyer.name);
-  });
+  buyers.forEach(
+    function(buyer) {
+
+      buyersMap[
+        cleanString(
+          buyer.buyerId
+        )
+      ] =
+        cleanString(
+          buyer.name
+        );
+
+    });
+
 
   const sales =
     getRowsAsObjects('Sales')
-      .filter(function(sale) {
+      .filter(
+        function(sale) {
 
-        return sameId(
-          sale.farmId,
-          farmId
-        );
-      })
-      .map(function(sale) {
+          return sameId(
+            sale.farmId,
+            farmId
+          );
 
-        return {
+        })
+      .map(
+        function(sale) {
 
-          ...sale,
+          return {
 
-          saleId:
-            cleanString(sale.saleId),
+            ...sale,
 
-          farmId:
-            cleanString(sale.farmId),
+            saleId:
+              cleanString(
+                sale.saleId
+              ),
 
-          buyerId:
-            cleanString(sale.buyerId),
+            farmId:
+              cleanString(
+                sale.farmId
+              ),
 
-          buyerName:
-            buyersMap[
-              cleanString(sale.buyerId)
-            ] ||
-            'Direct / Cash Buyer',
+            buyerId:
+              cleanString(
+                sale.buyerId
+              ),
 
-          saleDate:
-            dateString(sale.saleDate),
+            buyerName:
+              buyersMap[
+                cleanString(
+                  sale.buyerId
+                )
+              ] ||
+              'Direct / Cash Buyer',
 
-          litres:
-            parseNumber(sale.litres),
+            saleDate:
+              dateString(
+                sale.saleDate
+              ),
 
-          pricePerLitre:
-            parseNumber(
-              sale.pricePerLitre
-            ),
+            litres:
+              parseNumber(
+                sale.litres
+              ),
 
-          totalAmount:
-            parseNumber(
-              sale.totalAmount
-            ),
+            pricePerLitre:
+              parseNumber(
+                sale.pricePerLitre
+              ),
 
-          amountPaid:
-            parseNumber(
-              sale.amountPaid
-            ),
+            totalAmount:
+              parseNumber(
+                sale.totalAmount
+              ),
 
-          amountDue:
-            parseNumber(
-              sale.amountDue
+            amountPaid:
+              parseNumber(
+                sale.amountPaid
+              ),
+
+            amountDue:
+              parseNumber(
+                sale.amountDue
+              )
+
+          };
+
+        })
+      .sort(
+        function(a, b) {
+
+          return String(
+            b.saleDate || ''
+          ).localeCompare(
+            String(
+              a.saleDate || ''
             )
-        };
-      })
-      .sort(function(a, b) {
+          );
 
-        return (
-          b.saleDate.localeCompare(
-            a.saleDate
-          )
-        );
-      });
+        });
+
 
   return createJsonResponse({
-    success: true,
-    data: sales
+
+    success:
+      true,
+
+    data:
+      sales,
+
+    count:
+      sales.length
+
   });
 }
 
@@ -2938,20 +4148,34 @@ function handleCreateSale(
   if (!farmId) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'No farm is associated with this account.'
+
     });
   }
 
+
   const saleDate =
-    dateString(data.saleDate);
+    dateString(
+      data.saleDate
+    );
+
 
   const litres =
-    parseNumber(data.litres);
+    parseNumber(
+      data.litres
+    );
+
 
   const price =
-    parseNumber(data.pricePerLitre);
+    parseNumber(
+      data.pricePerLitre
+    );
+
 
   if (
     !saleDate ||
@@ -2960,36 +4184,52 @@ function handleCreateSale(
   ) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Date, litres and price per litre must be valid values greater than zero.'
+
     });
   }
 
+
   const total =
-    round2(litres * price);
+    round2(
+      litres *
+      price
+    );
+
 
   const paid =
     data.amountPaid !== undefined
       ? Math.max(
           0,
-          parseNumber(data.amountPaid)
+          parseNumber(
+            data.amountPaid
+          )
         )
       : total;
+
 
   const due =
     round2(
       Math.max(
         0,
-        total - paid
+        total -
+        paid
       )
     );
+
 
   const saleId =
     generateId('SALE');
 
+
   const now =
     new Date().toISOString();
+
 
   const newSale = {
 
@@ -3000,7 +4240,9 @@ function handleCreateSale(
       farmId,
 
     buyerId:
-      cleanString(data.buyerId),
+      cleanString(
+        data.buyerId
+      ),
 
     saleDate:
       saleDate,
@@ -3021,7 +4263,9 @@ function handleCreateSale(
       due,
 
     notes:
-      cleanString(data.notes),
+      cleanString(
+        data.notes
+      ),
 
     createdBy:
       userId,
@@ -3031,12 +4275,15 @@ function handleCreateSale(
 
     updatedAt:
       now
+
   };
+
 
   appendRowObject(
     'Sales',
     newSale
   );
+
 
   logActivity(
     farmId,
@@ -3048,11 +4295,18 @@ function handleCreateSale(
       total.toLocaleString()
   );
 
+
   return createJsonResponse({
-    success: true,
-    data: newSale,
+
+    success:
+      true,
+
+    data:
+      newSale,
+
     message:
       'Sale recorded successfully.'
+
   });
 }
 
@@ -3064,33 +4318,58 @@ function handleUpdateSale(
 ) {
 
   const saleId =
-    cleanString(data.saleId);
+    cleanString(
+      data.saleId
+    );
+
 
   const sales =
-    getRowsAsObjects('Sales');
+    getRowsAsObjects(
+      'Sales'
+    );
+
 
   const sale =
-    sales.find(function(s) {
+    sales.find(
+      function(s) {
 
-      return (
-        sameId(s.saleId, saleId) &&
-        sameId(s.farmId, farmId)
-      );
-    });
+        return (
+          sameId(
+            s.saleId,
+            saleId
+          ) &&
+          sameId(
+            s.farmId,
+            farmId
+          )
+        );
+
+      });
+
 
   if (!sale) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Sale not found.'
+
     });
   }
 
+
   const litres =
     data.litres !== undefined
-      ? parseNumber(data.litres)
-      : parseNumber(sale.litres);
+      ? parseNumber(
+          data.litres
+        )
+      : parseNumber(
+          sale.litres
+        );
+
 
   const price =
     data.pricePerLitre !== undefined
@@ -3101,26 +4380,53 @@ function handleUpdateSale(
           sale.pricePerLitre
         );
 
+
+  if (
+    litres <= 0 ||
+    price <= 0
+  ) {
+
+    return createJsonResponse({
+
+      success:
+        false,
+
+      message:
+        'Litres and price per litre must be greater than zero.'
+
+    });
+  }
+
+
   const total =
-    round2(litres * price);
+    round2(
+      litres *
+      price
+    );
+
 
   const paid =
     data.amountPaid !== undefined
       ? Math.max(
           0,
-          parseNumber(data.amountPaid)
+          parseNumber(
+            data.amountPaid
+          )
         )
       : parseNumber(
           sale.amountPaid
         );
 
+
   const due =
     round2(
       Math.max(
         0,
-        total - paid
+        total -
+        paid
       )
     );
+
 
   const updates = {
 
@@ -3141,34 +4447,49 @@ function handleUpdateSale(
 
     updatedAt:
       new Date().toISOString()
+
   };
+
 
   if (
     data.buyerId !== undefined
   ) {
+
     updates.buyerId =
-      cleanString(data.buyerId);
+      cleanString(
+        data.buyerId
+      );
   }
+
 
   if (
     data.saleDate !== undefined
   ) {
+
     updates.saleDate =
-      dateString(data.saleDate);
+      dateString(
+        data.saleDate
+      );
   }
+
 
   if (
     data.notes !== undefined
   ) {
+
     updates.notes =
-      cleanString(data.notes);
+      cleanString(
+        data.notes
+      );
   }
+
 
   updateRowObject(
     'Sales',
     sale._rowIndex,
     updates
   );
+
 
   logActivity(
     farmId,
@@ -3177,10 +4498,15 @@ function handleUpdateSale(
     'Updated sale.'
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Sale updated.'
+
   });
 }
 
@@ -3192,33 +4518,54 @@ function handleDeleteSale(
 ) {
 
   saleId =
-    cleanString(saleId);
+    cleanString(
+      saleId
+    );
+
 
   const sales =
-    getRowsAsObjects('Sales');
+    getRowsAsObjects(
+      'Sales'
+    );
+
 
   const sale =
-    sales.find(function(s) {
+    sales.find(
+      function(s) {
 
-      return (
-        sameId(s.saleId, saleId) &&
-        sameId(s.farmId, farmId)
-      );
-    });
+        return (
+          sameId(
+            s.saleId,
+            saleId
+          ) &&
+          sameId(
+            s.farmId,
+            farmId
+          )
+        );
+
+      });
+
 
   if (!sale) {
 
     return createJsonResponse({
-      success: false,
+
+      success:
+        false,
+
       message:
         'Sale not found.'
+
     });
   }
+
 
   deleteRowByIndex(
     'Sales',
     sale._rowIndex
   );
+
 
   logActivity(
     farmId,
@@ -3227,11 +4574,145 @@ function handleDeleteSale(
     'Deleted sale.'
   );
 
+
   return createJsonResponse({
-    success: true,
+
+    success:
+      true,
+
     message:
       'Sale deleted.'
+
   });
+}
+
+
+/* =====================================================
+   DATE MATH HELPERS
+   ===================================================== */
+
+/*
+ * Converts yyyy-MM-dd into a local date object
+ * without the UTC shift problem.
+ */
+function localDateFromString(
+  dateValue
+) {
+
+  const value =
+    dateString(
+      dateValue
+    );
+
+
+  if (!value) {
+    return null;
+  }
+
+
+  const parts =
+    value
+      .split('-')
+      .map(Number);
+
+
+  if (
+    parts.length !== 3 ||
+    parts.some(isNaN)
+  ) {
+    return null;
+  }
+
+
+  return new Date(
+    parts[0],
+    parts[1] - 1,
+    parts[2],
+    12,
+    0,
+    0
+  );
+}
+
+
+function daysBetweenDates(
+  dateA,
+  dateB
+) {
+
+  const a =
+    localDateFromString(
+      dateA
+    );
+
+  const b =
+    localDateFromString(
+      dateB
+    );
+
+
+  if (!a || !b) {
+    return null;
+  }
+
+
+  return Math.floor(
+    (
+      b.getTime() -
+      a.getTime()
+    ) /
+    (
+      24 *
+      60 *
+      60 *
+      1000
+    )
+  );
+}
+
+
+/*
+ * Returns how many days ago a record date was
+ * relative to today in Africa/Kampala.
+ */
+function daysAgoFromToday(
+  recordDate
+) {
+
+  const record =
+    localDateFromString(
+      recordDate
+    );
+
+
+  if (!record) {
+    return null;
+  }
+
+
+  const today =
+    localDateFromString(
+      todayString()
+    );
+
+
+  if (!today) {
+    return null;
+  }
+
+
+  return Math.floor(
+    (
+      today.getTime() -
+      record.getTime()
+    ) /
+    (
+      24 *
+      60 *
+      60 *
+      1000
+    )
+  );
 }
 
 
@@ -3253,83 +4734,112 @@ function handleGetDashboardData(
       [],
       [],
       [],
-      null
+      userId
     );
   }
 
+
   const farms =
-    getRowsAsObjects('Farms');
+    getRowsAsObjects(
+      'Farms'
+    );
+
 
   const farm =
-    farms.find(function(f) {
+    farms.find(
+      function(f) {
 
-      return sameId(
-        f.farmId,
-        farmId
-      );
-    }) || null;
+        return sameId(
+          f.farmId,
+          farmId
+        );
+
+      }) || null;
 
 
   const cows =
     getRowsAsObjects('Cows')
-      .filter(function(c) {
+      .filter(
+        function(c) {
 
-        return sameId(
-          c.farmId,
-          farmId
-        );
-      });
+          return sameId(
+            c.farmId,
+            farmId
+          );
+
+        });
 
 
   const milkRecords =
-    getRowsAsObjects('MilkRecords')
-      .filter(function(m) {
+    getRowsAsObjects(
+      'MilkRecords'
+    )
+      .filter(
+        function(m) {
 
-        return sameId(
-          m.farmId,
-          farmId
-        );
-      });
+          return sameId(
+            m.farmId,
+            farmId
+          );
+
+        });
 
 
   const expenses =
-    getRowsAsObjects('Expenses')
-      .filter(function(e) {
+    getRowsAsObjects(
+      'Expenses'
+    )
+      .filter(
+        function(e) {
 
-        return sameId(
-          e.farmId,
-          farmId
-        );
-      });
+          return sameId(
+            e.farmId,
+            farmId
+          );
+
+        });
 
 
   const sales =
-    getRowsAsObjects('Sales')
-      .filter(function(s) {
+    getRowsAsObjects(
+      'Sales'
+    )
+      .filter(
+        function(s) {
 
-        return sameId(
-          s.farmId,
-          farmId
-        );
-      });
+          return sameId(
+            s.farmId,
+            farmId
+          );
+
+        });
 
 
   const activities =
-    getRowsAsObjects('Activity')
-      .filter(function(a) {
+    getRowsAsObjects(
+      'Activity'
+    )
+      .filter(
+        function(a) {
 
-        return sameId(
-          a.farmId,
-          farmId
-        );
-      })
-      .sort(function(a, b) {
-
-        return cleanString(b.timestamp)
-          .localeCompare(
-            cleanString(a.timestamp)
+          return sameId(
+            a.farmId,
+            farmId
           );
-      })
+
+        })
+      .sort(
+        function(a, b) {
+
+          return String(
+            b.timestamp || ''
+          ).localeCompare(
+            String(
+              a.timestamp || ''
+            )
+          );
+
+        })
       .slice(0, 10);
 
 
@@ -3337,57 +4847,89 @@ function handleGetDashboardData(
     todayString();
 
 
-  /* TODAY */
+  /* ===================================================
+     TODAY
+     =================================================== */
 
   const todayMilk =
     milkRecords
-      .filter(function(r) {
+      .filter(
+        function(r) {
 
-        return dateString(
-          r.recordDate
-        ) === today;
-      })
-      .reduce(function(total, r) {
+          return (
+            dateString(
+              r.recordDate
+            ) === today
+          );
 
-        return (
-          total +
-          parseNumber(r.totalLitres)
-        );
-      }, 0);
+        })
+      .reduce(
+        function(total, r) {
+
+          return (
+            total +
+            parseNumber(
+              r.totalLitres
+            )
+          );
+
+        },
+        0
+      );
 
 
   const todayRevenue =
     sales
-      .filter(function(s) {
+      .filter(
+        function(s) {
 
-        return dateString(
-          s.saleDate
-        ) === today;
-      })
-      .reduce(function(total, s) {
+          return (
+            dateString(
+              s.saleDate
+            ) === today
+          );
 
-        return (
-          total +
-          parseNumber(s.totalAmount)
-        );
-      }, 0);
+        })
+      .reduce(
+        function(total, s) {
+
+          return (
+            total +
+            parseNumber(
+              s.totalAmount
+            )
+          );
+
+        },
+        0
+      );
 
 
   const todayExpenses =
     expenses
-      .filter(function(e) {
+      .filter(
+        function(e) {
 
-        return dateString(
-          e.expenseDate
-        ) === today;
-      })
-      .reduce(function(total, e) {
+          return (
+            dateString(
+              e.expenseDate
+            ) === today
+          );
 
-        return (
-          total +
-          parseNumber(e.amount)
-        );
-      }, 0);
+        })
+      .reduce(
+        function(total, e) {
+
+          return (
+            total +
+            parseNumber(
+              e.amount
+            )
+          );
+
+        },
+        0
+      );
 
 
   const estimatedMargin =
@@ -3397,73 +4939,206 @@ function handleGetDashboardData(
     );
 
 
-  /* ALL-TIME */
+  /* ===================================================
+     ALL-TIME
+     =================================================== */
 
   const totalMilk =
-    milkRecords.reduce(function(total, r) {
+    milkRecords.reduce(
+      function(total, r) {
 
-      return (
-        total +
-        parseNumber(r.totalLitres)
-      );
-    }, 0);
+        return (
+          total +
+          parseNumber(
+            r.totalLitres
+          )
+        );
+
+      },
+      0
+    );
 
 
   const totalRevenue =
-    sales.reduce(function(total, s) {
+    sales.reduce(
+      function(total, s) {
 
-      return (
-        total +
-        parseNumber(s.totalAmount)
-      );
-    }, 0);
+        return (
+          total +
+          parseNumber(
+            s.totalAmount
+          )
+        );
+
+      },
+      0
+    );
 
 
   const totalExpenses =
-    expenses.reduce(function(total, e) {
+    expenses.reduce(
+      function(total, e) {
 
-      return (
-        total +
-        parseNumber(e.amount)
-      );
-    }, 0);
+        return (
+          total +
+          parseNumber(
+            e.amount
+          )
+        );
+
+      },
+      0
+    );
 
 
   const outstandingPayments =
-    sales.reduce(function(total, s) {
+    sales.reduce(
+      function(total, s) {
 
-      return (
-        total +
-        Math.max(
-          0,
-          parseNumber(s.amountDue)
-        )
+        return (
+          total +
+          Math.max(
+            0,
+            parseNumber(
+              s.amountDue
+            )
+          )
+        );
+
+      },
+      0
+    );
+
+
+  /* ===================================================
+     CURRENT MONTH
+     =================================================== */
+
+  const currentMonth =
+    today.substring(
+      0,
+      7
+    );
+
+
+  const monthMilk =
+    milkRecords
+      .filter(
+        function(record) {
+
+          return dateString(
+            record.recordDate
+          ).indexOf(
+            currentMonth
+          ) === 0;
+
+        })
+      .reduce(
+        function(total, record) {
+
+          return (
+            total +
+            parseNumber(
+              record.totalLitres
+            )
+          );
+
+        },
+        0
       );
-    }, 0);
 
 
-  /* HERD */
+  const monthRevenue =
+    sales
+      .filter(
+        function(sale) {
+
+          return dateString(
+            sale.saleDate
+          ).indexOf(
+            currentMonth
+          ) === 0;
+
+        })
+      .reduce(
+        function(total, sale) {
+
+          return (
+            total +
+            parseNumber(
+              sale.totalAmount
+            )
+          );
+
+        },
+        0
+      );
+
+
+  const monthExpenses =
+    expenses
+      .filter(
+        function(expense) {
+
+          return dateString(
+            expense.expenseDate
+          ).indexOf(
+            currentMonth
+          ) === 0;
+
+        })
+      .reduce(
+        function(total, expense) {
+
+          return (
+            total +
+            parseNumber(
+              expense.amount
+            )
+          );
+
+        },
+        0
+      );
+
+
+  const monthNetMargin =
+    round2(
+      monthRevenue -
+      monthExpenses
+    );
+
+
+  /* ===================================================
+     HERD
+     =================================================== */
 
   const cowCount =
     cows.length;
 
+
   const lactatingCows =
-    cows.filter(function(c) {
+    cows.filter(
+      function(cow) {
 
-      return (
-        cleanString(c.status)
-          .toLowerCase() ===
-        'lactating'
-      );
-    }).length;
+        return (
+          cleanString(
+            cow.status
+          ).toLowerCase() ===
+          'lactating'
+        );
+
+      }).length;
 
 
-  /* 7 DAY TREND */
+  /* ===================================================
+     LAST 7 DAYS
+     =================================================== */
 
   const dailyMilkTrend = [];
 
   let currentWeekMilk = 0;
-  let previousWeekMilk = 0;
+
 
   for (
     let i = 6;
@@ -3471,61 +5146,89 @@ function handleGetDashboardData(
     i--
   ) {
 
-    const d =
-      new Date(
-        Date.now() -
-        i * 24 * 60 * 60 * 1000
+    const baseDate =
+      localDateFromString(
+        today
       );
+
+
+    baseDate.setDate(
+      baseDate.getDate() -
+      i
+    );
+
 
     const dStr =
       Utilities.formatDate(
-        d,
+        baseDate,
         CONFIG.TIMEZONE,
         'yyyy-MM-dd'
       );
 
+
     const dayName =
       Utilities.formatDate(
-        d,
+        baseDate,
         CONFIG.TIMEZONE,
         'EEE'
       );
 
-    const dayRecords =
-      milkRecords.filter(function(r) {
 
-        return (
-          dateString(r.recordDate) ===
-          dStr
-        );
-      });
+    const dayRecords =
+      milkRecords.filter(
+        function(r) {
+
+          return (
+            dateString(
+              r.recordDate
+            ) === dStr
+          );
+
+        });
+
 
     const morning =
-      dayRecords.reduce(function(total, r) {
+      dayRecords.reduce(
+        function(total, r) {
 
-        return (
-          total +
-          parseNumber(
-            r.morningLitres
-          )
-        );
-      }, 0);
+          return (
+            total +
+            parseNumber(
+              r.morningLitres
+            )
+          );
+
+        },
+        0
+      );
+
 
     const evening =
-      dayRecords.reduce(function(total, r) {
+      dayRecords.reduce(
+        function(total, r) {
 
-        return (
-          total +
-          parseNumber(
-            r.eveningLitres
-          )
-        );
-      }, 0);
+          return (
+            total +
+            parseNumber(
+              r.eveningLitres
+            )
+          );
+
+        },
+        0
+      );
+
 
     const total =
-      round2(morning + evening);
+      round2(
+        morning +
+        evening
+      );
 
-    currentWeekMilk += total;
+
+    currentWeekMilk +=
+      total;
+
 
     dailyMilkTrend.push({
 
@@ -3543,11 +5246,17 @@ function handleGetDashboardData(
 
       totalLitres:
         total
+
     });
   }
 
 
-  /* PREVIOUS 7 DAYS */
+  /* ===================================================
+     PREVIOUS 7 DAYS
+     =================================================== */
+
+  let previousWeekMilk = 0;
+
 
   for (
     let i = 7;
@@ -3555,36 +5264,60 @@ function handleGetDashboardData(
     i++
   ) {
 
-    const d =
-      new Date(
-        Date.now() -
-        i * 24 * 60 * 60 * 1000
+    const baseDate =
+      localDateFromString(
+        today
       );
+
+
+    baseDate.setDate(
+      baseDate.getDate() -
+      i
+    );
+
 
     const dStr =
       Utilities.formatDate(
-        d,
+        baseDate,
         CONFIG.TIMEZONE,
         'yyyy-MM-dd'
       );
 
-    milkRecords.forEach(function(r) {
 
-      if (
-        dateString(r.recordDate) ===
-        dStr
-      ) {
+    milkRecords.forEach(
+      function(record) {
 
-        previousWeekMilk +=
-          parseNumber(
-            r.totalLitres
-          );
-      }
-    });
+        if (
+          dateString(
+            record.recordDate
+          ) === dStr
+        ) {
+
+          previousWeekMilk +=
+            parseNumber(
+              record.totalLitres
+            );
+        }
+
+      });
   }
 
 
-  let productionChangePct = null;
+  currentWeekMilk =
+    round2(
+      currentWeekMilk
+    );
+
+
+  previousWeekMilk =
+    round2(
+      previousWeekMilk
+    );
+
+
+  let productionChangePct =
+    null;
+
 
   if (
     previousWeekMilk > 0
@@ -3599,74 +5332,101 @@ function handleGetDashboardData(
               previousWeekMilk
             ) /
             previousWeekMilk
-          ) * 100
+          ) *
+          100
         ).toFixed(1)
       );
   }
 
 
-  /* EXPENSE BREAKDOWN */
+  /* ===================================================
+     EXPENSE BREAKDOWN
+     =================================================== */
 
   const expenseMap = {};
 
-  expenses.forEach(function(e) {
 
-    const category =
-      cleanString(e.category) ||
-      'Other';
+  expenses.forEach(
+    function(e) {
 
-    expenseMap[category] =
-      (
-        expenseMap[category] ||
-        0
-      ) +
-      parseNumber(e.amount);
-  });
+      const category =
+        cleanString(
+          e.category
+        ) ||
+        'Other';
+
+
+      expenseMap[category] =
+        (
+          expenseMap[category] ||
+          0
+        ) +
+        parseNumber(
+          e.amount
+        );
+
+    });
 
 
   const expenseBreakdown =
-    Object.keys(expenseMap)
-      .map(function(category) {
+    Object.keys(
+      expenseMap
+    )
+      .map(
+        function(category) {
 
-        return {
+          return {
 
-          category:
-            category,
+            category:
+              category,
 
-          amount:
-            round2(
-              expenseMap[category]
-            ),
+            amount:
+              round2(
+                expenseMap[category]
+              ),
 
-          percentage:
-            totalExpenses > 0
-              ? Number(
-                  (
+            percentage:
+              totalExpenses > 0
+                ? Number(
                     (
-                      expenseMap[category] /
-                      totalExpenses
-                    ) * 100
-                  ).toFixed(1)
-                )
-              : 0
-        };
-      })
-      .sort(function(a, b) {
+                      (
+                        expenseMap[category] /
+                        totalExpenses
+                      ) *
+                      100
+                    ).toFixed(1)
+                  )
+                : 0
 
-        return b.amount - a.amount;
-      });
+          };
+
+        })
+      .sort(
+        function(a, b) {
+
+          return (
+            b.amount -
+            a.amount
+          );
+
+        });
 
 
-  /* FARM PULSE */
+  /* ===================================================
+     FARM PULSE
+     =================================================== */
 
   let pulseStatus =
     'getting_started';
 
+
   let pulseTitle =
     'Getting Started';
 
+
   let pulseMessage =
     'Start recording your farm data to generate useful insights.';
+
 
   let pulseHint =
     '+ Record Milk';
@@ -3674,12 +5434,21 @@ function handleGetDashboardData(
 
   const milkDays =
     new Set(
-      milkRecords.map(function(r) {
+      milkRecords
+        .map(
+          function(r) {
 
-        return dateString(
-          r.recordDate
-        );
-      })
+            return dateString(
+              r.recordDate
+            );
+
+          })
+        .filter(
+          function(date) {
+
+            return date !== '';
+
+          })
     ).size;
 
 
@@ -3699,7 +5468,9 @@ function handleGetDashboardData(
     pulseHint =
       '+ Record Milk';
 
-  } else if (
+  }
+
+  else if (
     productionChangePct !== null &&
     productionChangePct <= -12
   ) {
@@ -3720,7 +5491,9 @@ function handleGetDashboardData(
     pulseHint =
       'Review herd and feed records';
 
-  } else if (
+  }
+
+  else if (
     productionChangePct !== null &&
     productionChangePct < -4
   ) {
@@ -3741,7 +5514,9 @@ function handleGetDashboardData(
     pulseHint =
       'Monitor daily milk trends';
 
-  } else if (
+  }
+
+  else if (
     outstandingPayments > 0 &&
     outstandingPayments >
       totalRevenue * 0.4
@@ -3761,7 +5536,9 @@ function handleGetDashboardData(
     pulseHint =
       'Follow up on pending sales';
 
-  } else {
+  }
+
+  else {
 
     pulseStatus =
       'steady';
@@ -3774,10 +5551,13 @@ function handleGetDashboardData(
 
     pulseHint =
       'Keep recording daily';
+
   }
 
 
-  /* ALERTS */
+  /* ===================================================
+     ALERTS
+     =================================================== */
 
   const alerts = [];
 
@@ -3806,6 +5586,7 @@ function handleGetDashboardData(
 
       linkText:
         'Record today’s milk →'
+
     });
   }
 
@@ -3838,6 +5619,7 @@ function handleGetDashboardData(
 
       linkText:
         'Review production →'
+
     });
   }
 
@@ -3867,50 +5649,89 @@ function handleGetDashboardData(
 
       linkText:
         'View sales →'
+
     });
   }
 
 
-  /* FINANCIAL COMPARISON */
+  /* ===================================================
+     FINANCIAL COMPARISON
+     =================================================== */
 
   const financesComparison = [
 
     {
+
       period:
         'Total Farm Records',
 
       revenue:
-        round2(totalRevenue),
+        round2(
+          totalRevenue
+        ),
 
       expenses:
-        round2(totalExpenses),
+        round2(
+          totalExpenses
+        ),
 
       margin:
         round2(
           totalRevenue -
           totalExpenses
         )
+
+    },
+
+    {
+
+      period:
+        'Current Month',
+
+      revenue:
+        round2(
+          monthRevenue
+        ),
+
+      expenses:
+        round2(
+          monthExpenses
+        ),
+
+      margin:
+        round2(
+          monthNetMargin
+        )
+
     }
+
   ];
 
 
-  /* KPI OBJECT EXPECTED BY FRONTEND */
+  /* ===================================================
+     FRONTEND KPI OBJECT
+     =================================================== */
 
   const kpis = {
 
     todayMilkLitres:
-      round2(todayMilk),
+      round2(
+        todayMilk
+      ),
 
     todayRevenue:
-      round2(todayRevenue),
+      round2(
+        todayRevenue
+      ),
 
     todayExpenses:
-      round2(todayExpenses),
+      round2(
+        todayExpenses
+      ),
 
     monthNetMargin:
       round2(
-        totalRevenue -
-        totalExpenses
+        monthNetMargin
       ),
 
     herdSize:
@@ -3920,61 +5741,69 @@ function handleGetDashboardData(
       lactatingCows,
 
     outstandingReceivables:
-      round2(outstandingPayments),
+      round2(
+        outstandingPayments
+      ),
 
     monthMilkLitres:
-      round2(totalMilk)
+      round2(
+        monthMilk
+      )
+
   };
 
 
-  const data = {
+  /* ===================================================
+     RESPONSE
+     =================================================== */
 
-    /* ------------------------------------------
-       Frontend KPI format
-       ------------------------------------------ */
+  const data = {
 
     kpis:
       kpis,
 
 
-    /* ------------------------------------------
-       Existing direct values
-       ------------------------------------------ */
-
     farm:
       farm,
 
+
     todayMilk:
-      round2(todayMilk),
+      round2(
+        todayMilk
+      ),
 
     todayRevenue:
-      round2(todayRevenue),
+      round2(
+        todayRevenue
+      ),
 
     todayExpenses:
-      round2(todayExpenses),
+      round2(
+        todayExpenses
+      ),
 
     estimatedMargin:
-      round2(estimatedMargin),
+      round2(
+        estimatedMargin
+      ),
 
     cowCount:
       cowCount,
 
     weeklyMilk:
-      round2(currentWeekMilk),
+      currentWeekMilk,
 
     previousWeeklyMilk:
-      round2(previousWeekMilk),
+      previousWeekMilk,
 
     productionChangePct:
       productionChangePct,
 
     outstandingPayments:
-      round2(outstandingPayments),
+      round2(
+        outstandingPayments
+      ),
 
-
-    /* ------------------------------------------
-       Farm Pulse
-       ------------------------------------------ */
 
     farmPulse: {
 
@@ -3995,28 +5824,17 @@ function handleGetDashboardData(
 
       actionHint:
         pulseHint
+
     },
 
-
-    /* ------------------------------------------
-       Alerts
-       ------------------------------------------ */
 
     alerts:
       alerts,
 
 
-    /* ------------------------------------------
-       Activity
-       ------------------------------------------ */
-
     recentActivity:
       activities,
 
-
-    /* ------------------------------------------
-       Charts
-       ------------------------------------------ */
 
     dailyMilkTrend:
       dailyMilkTrend,
@@ -4036,10 +5854,6 @@ function handleGetDashboardData(
       financesComparison,
 
 
-    /* ------------------------------------------
-       Record counts
-       ------------------------------------------ */
-
     totalRecordsCount: {
 
       milk:
@@ -4053,20 +5867,27 @@ function handleGetDashboardData(
 
       sales:
         sales.length
+
     }
+
   };
 
 
   return createJsonResponse({
-    success: true,
-    data: data
+
+    success:
+      true,
+
+    data:
+      data
+
   });
 }
 
 
-/*
- * Dashboard response when there is no farm.
- */
+/* =====================================================
+   EMPTY DASHBOARD
+   ===================================================== */
 
 function createDashboardResponse(
   farm,
@@ -4081,6 +5902,7 @@ function createDashboardResponse(
   const emptyTrend = [];
 
   const emptyComparison = [];
+
 
   const kpis = {
 
@@ -4107,7 +5929,9 @@ function createDashboardResponse(
 
     monthMilkLitres:
       0
+
   };
+
 
   return createJsonResponse({
 
@@ -4149,6 +5973,7 @@ function createDashboardResponse(
       outstandingPayments:
         0,
 
+
       farmPulse: {
 
         status:
@@ -4168,7 +5993,9 @@ function createDashboardResponse(
 
         actionHint:
           '+ Record Milk'
+
       },
+
 
       alerts:
         [],
@@ -4176,20 +6003,24 @@ function createDashboardResponse(
       recentActivity:
         [],
 
+
       dailyMilkTrend:
         emptyTrend,
 
       milkTrend:
         emptyTrend,
 
+
       expenseBreakdown:
         [],
+
 
       financesComparison:
         emptyComparison,
 
       financialComparison:
         emptyComparison,
+
 
       totalRecordsCount: {
 
@@ -4204,8 +6035,11 @@ function createDashboardResponse(
 
         sales:
           0
+
       }
+
     }
+
   });
 }
 
@@ -4233,7 +6067,9 @@ function handleGetReportData(
 
         message:
           'No farm is associated with this account.'
+
       }
+
     });
   }
 
@@ -4246,64 +6082,86 @@ function handleGetReportData(
 
 
   const milkRecords =
-    getRowsAsObjects('MilkRecords')
-      .filter(function(r) {
+    getRowsAsObjects(
+      'MilkRecords'
+    )
+      .filter(
+        function(r) {
 
-        return sameId(
-          r.farmId,
-          farmId
-        );
-      });
+          return sameId(
+            r.farmId,
+            farmId
+          );
+
+        });
 
 
   const expenses =
-    getRowsAsObjects('Expenses')
-      .filter(function(r) {
+    getRowsAsObjects(
+      'Expenses'
+    )
+      .filter(
+        function(r) {
 
-        return sameId(
-          r.farmId,
-          farmId
-        );
-      });
+          return sameId(
+            r.farmId,
+            farmId
+          );
+
+        });
 
 
   const sales =
-    getRowsAsObjects('Sales')
-      .filter(function(r) {
+    getRowsAsObjects(
+      'Sales'
+    )
+      .filter(
+        function(r) {
 
-        return sameId(
-          r.farmId,
-          farmId
-        );
-      });
+          return sameId(
+            r.farmId,
+            farmId
+          );
+
+        });
 
 
   const cows =
-    getRowsAsObjects('Cows')
-      .filter(function(r) {
+    getRowsAsObjects(
+      'Cows'
+    )
+      .filter(
+        function(r) {
 
-        return sameId(
-          r.farmId,
-          farmId
-        );
-      });
+          return sameId(
+            r.farmId,
+            farmId
+          );
+
+        });
 
 
   const buyers =
-    getRowsAsObjects('Buyers')
-      .filter(function(r) {
+    getRowsAsObjects(
+      'Buyers'
+    )
+      .filter(
+        function(r) {
 
-        return sameId(
-          r.farmId,
-          farmId
-        );
-      });
+          return sameId(
+            r.farmId,
+            farmId
+          );
+
+        });
 
 
   /* DATE RANGE */
 
   const range =
-    getReportDateRange(period);
+    getReportDateRange(
+      period
+    );
 
 
   const filteredMilk =
@@ -4351,88 +6209,112 @@ function handleGetReportData(
 
         message:
           'No records were found for the selected period.'
+
       }
+
     });
   }
 
 
-  /* PRODUCTION */
+  /* ===================================================
+     PRODUCTION
+     =================================================== */
 
   let totalLitres = 0;
 
   const dayLitresMap = {};
 
-  filteredMilk.forEach(function(record) {
 
-    const date =
-      dateString(
-        record.recordDate
-      );
+  filteredMilk.forEach(
+    function(record) {
 
-    const litres =
-      parseNumber(
-        record.totalLitres
-      );
+      const date =
+        dateString(
+          record.recordDate
+        );
 
-    totalLitres +=
-      litres;
 
-    if (date) {
+      const litres =
+        parseNumber(
+          record.totalLitres
+        );
 
-      dayLitresMap[date] =
-        (
-          dayLitresMap[date] ||
-          0
-        ) +
+
+      totalLitres +=
         litres;
-    }
-  });
+
+
+      if (date) {
+
+        dayLitresMap[date] =
+          (
+            dayLitresMap[date] ||
+            0
+          ) +
+          litres;
+      }
+
+    });
 
 
   const dates =
-    Object.keys(dayLitresMap)
-      .sort();
+    Object.keys(
+      dayLitresMap
+    ).sort();
 
 
   let bestDay = null;
+
   let lowestDay = null;
 
 
-  dates.forEach(function(date) {
+  dates.forEach(
+    function(date) {
 
-    const litres =
-      dayLitresMap[date];
+      const litres =
+        dayLitresMap[date];
 
-    if (
-      !bestDay ||
-      litres >
-        bestDay.litres
-    ) {
 
-      bestDay = {
-        date:
-          date,
+      if (
+        !bestDay ||
+        litres >
+          bestDay.litres
+      ) {
 
-        litres:
-          round2(litres)
-      };
-    }
+        bestDay = {
 
-    if (
-      !lowestDay ||
-      litres <
-        lowestDay.litres
-    ) {
+          date:
+            date,
 
-      lowestDay = {
-        date:
-          date,
+          litres:
+            round2(
+              litres
+            )
 
-        litres:
-          round2(litres)
-      };
-    }
-  });
+        };
+      }
+
+
+      if (
+        !lowestDay ||
+        litres <
+          lowestDay.litres
+      ) {
+
+        lowestDay = {
+
+          date:
+            date,
+
+          litres:
+            round2(
+              litres
+            )
+
+        };
+      }
+
+    });
 
 
   const avgDaily =
@@ -4444,7 +6326,9 @@ function handleGetReportData(
       : 0;
 
 
-  /* FINANCIALS */
+  /* ===================================================
+     FINANCIALS
+     =================================================== */
 
   const totalRevenue =
     filteredSales.reduce(
@@ -4456,6 +6340,7 @@ function handleGetReportData(
             sale.totalAmount
           )
         );
+
       },
       0
     );
@@ -4471,6 +6356,7 @@ function handleGetReportData(
             expense.amount
           )
         );
+
       },
       0
     );
@@ -4505,14 +6391,18 @@ function handleGetReportData(
             )
           )
         );
+
       },
       0
     );
 
 
-  /* EXPENSE CATEGORIES */
+  /* ===================================================
+     EXPENSE CATEGORIES
+     =================================================== */
 
   const categoryMap = {};
+
 
   filteredExpenses.forEach(
     function(expense) {
@@ -4523,6 +6413,7 @@ function handleGetReportData(
         ) ||
         'Other';
 
+
       categoryMap[category] =
         (
           categoryMap[category] ||
@@ -4531,131 +6422,180 @@ function handleGetReportData(
         parseNumber(
           expense.amount
         );
-    }
-  );
+
+    });
 
 
   const expensesByCategory =
-    Object.keys(categoryMap)
-      .map(function(category) {
+    Object.keys(
+      categoryMap
+    )
+      .map(
+        function(category) {
 
-        return {
+          return {
 
-          category:
-            category,
+            category:
+              category,
 
-          amount:
-            round2(
-              categoryMap[category]
-            ),
+            amount:
+              round2(
+                categoryMap[
+                  category
+                ]
+              ),
 
-          percentage:
-            totalExpenseAmount > 0
-              ? Number(
-                  (
+            percentage:
+              totalExpenseAmount > 0
+                ? Number(
                     (
-                      categoryMap[category] /
-                      totalExpenseAmount
-                    ) * 100
-                  ).toFixed(1)
-                )
-              : 0
-        };
-      })
-      .sort(function(a, b) {
+                      (
+                        categoryMap[
+                          category
+                        ] /
+                        totalExpenseAmount
+                      ) *
+                      100
+                    ).toFixed(1)
+                  )
+                : 0
 
-        return b.amount - a.amount;
-      });
+          };
+
+        })
+      .sort(
+        function(a, b) {
+
+          return (
+            b.amount -
+            a.amount
+          );
+
+        });
 
 
-  /* SALES BY BUYER */
+  /* ===================================================
+     SALES BY BUYER
+     =================================================== */
 
   const buyersMap = {};
 
-  buyers.forEach(function(buyer) {
 
-    buyersMap[
-      cleanString(buyer.buyerId)
-    ] =
-      cleanString(buyer.name);
-  });
+  buyers.forEach(
+    function(buyer) {
+
+      buyersMap[
+        cleanString(
+          buyer.buyerId
+        )
+      ] =
+        cleanString(
+          buyer.name
+        );
+
+    });
 
 
   const buyerSalesMap = {};
 
-  filteredSales.forEach(function(sale) {
 
-    const buyerName =
-      buyersMap[
-        cleanString(sale.buyerId)
-      ] ||
-      'Direct / Cash Buyer';
+  filteredSales.forEach(
+    function(sale) {
 
-    if (
-      !buyerSalesMap[buyerName]
-    ) {
+      const buyerName =
+        buyersMap[
+          cleanString(
+            sale.buyerId
+          )
+        ] ||
+        'Direct / Cash Buyer';
 
-      buyerSalesMap[buyerName] = {
 
-        litres:
-          0,
+      if (
+        !buyerSalesMap[
+          buyerName
+        ]
+      ) {
 
-        amount:
-          0
-      };
-    }
+        buyerSalesMap[
+          buyerName
+        ] = {
 
-    buyerSalesMap[
-      buyerName
-    ].litres +=
-      parseNumber(sale.litres);
+          litres:
+            0,
 
-    buyerSalesMap[
-      buyerName
-    ].amount +=
-      parseNumber(
-        sale.totalAmount
-      );
-  });
+          amount:
+            0
+
+        };
+      }
+
+
+      buyerSalesMap[
+        buyerName
+      ].litres +=
+        parseNumber(
+          sale.litres
+        );
+
+
+      buyerSalesMap[
+        buyerName
+      ].amount +=
+        parseNumber(
+          sale.totalAmount
+        );
+
+    });
 
 
   const salesByBuyer =
-    Object.keys(buyerSalesMap)
-      .map(function(buyerName) {
+    Object.keys(
+      buyerSalesMap
+    )
+      .map(
+        function(buyerName) {
 
-        return {
+          return {
 
-          buyerName:
-            buyerName,
+            buyerName:
+              buyerName,
 
-          litres:
-            round2(
-              buyerSalesMap[
-                buyerName
-              ].litres
-            ),
+            litres:
+              round2(
+                buyerSalesMap[
+                  buyerName
+                ].litres
+              ),
 
-          amount:
-            round2(
-              buyerSalesMap[
-                buyerName
-              ].amount
-            )
-        };
-      });
+            amount:
+              round2(
+                buyerSalesMap[
+                  buyerName
+                ].amount
+              )
+
+          };
+
+        });
 
 
-  /* HERD */
+  /* ===================================================
+     HERD
+     =================================================== */
 
   const lactatingCount =
-    cows.filter(function(cow) {
+    cows.filter(
+      function(cow) {
 
-      return (
-        cleanString(cow.status)
-          .toLowerCase() ===
-        'lactating'
-      );
-    }).length;
+        return (
+          cleanString(
+            cow.status
+          ).toLowerCase() ===
+          'lactating'
+        );
+
+      }).length;
 
 
   const litresPerLactating =
@@ -4670,23 +6610,32 @@ function handleGetReportData(
       : null;
 
 
-  /* DAILY REPORT DATA */
+  /* ===================================================
+     DAILY REPORT DATA
+     =================================================== */
 
   const dailyData =
-    dates.map(function(date) {
+    dates.map(
+      function(date) {
 
-      return {
+        return {
 
-        date:
-          date,
+          date:
+            date,
 
-        litres:
-          round2(
-            dayLitresMap[date]
-          )
-      };
-    });
+          litres:
+            round2(
+              dayLitresMap[date]
+            )
 
+        };
+
+      });
+
+
+  /* ===================================================
+     RESPONSE
+     =================================================== */
 
   return createJsonResponse({
 
@@ -4707,6 +6656,7 @@ function handleGetReportData(
       hasSufficientData:
         true,
 
+
       summary: {
 
         milkChangePct:
@@ -4720,12 +6670,16 @@ function handleGetReportData(
 
         marginChangeAmount:
           null
+
       },
+
 
       production: {
 
         totalLitres:
-          round2(totalLitres),
+          round2(
+            totalLitres
+          ),
 
         averageDailyLitres:
           avgDaily,
@@ -4738,15 +6692,21 @@ function handleGetReportData(
 
         dailyData:
           dailyData
+
       },
+
 
       financial: {
 
         revenue:
-          round2(totalRevenue),
+          round2(
+            totalRevenue
+          ),
 
         expenses:
-          round2(totalExpenseAmount),
+          round2(
+            totalExpenseAmount
+          ),
 
         estimatedMargin:
           margin,
@@ -4755,14 +6715,18 @@ function handleGetReportData(
           costPerLitre,
 
         outstandingPayments:
-          round2(outstanding),
+          round2(
+            outstanding
+          ),
 
         expensesByCategory:
           expensesByCategory,
 
         salesByBuyer:
           salesByBuyer
+
       },
+
 
       farmPerformance: {
 
@@ -4774,8 +6738,11 @@ function handleGetReportData(
 
         litresPerLactatingCow:
           litresPerLactating
+
       }
+
     }
+
   });
 }
 
@@ -4784,13 +6751,19 @@ function handleGetReportData(
    REPORT DATE HELPERS
    ===================================================== */
 
-function getReportDateRange(period) {
-
-  const now =
-    new Date();
+function getReportDateRange(
+  period
+) {
 
   const today =
     todayString();
+
+
+  const todayDate =
+    localDateFromString(
+      today
+    );
+
 
   let startDate =
     '';
@@ -4806,26 +6779,33 @@ function getReportDateRange(period) {
     startDate =
       today;
 
-  } else if (
+  }
+
+  else if (
     period === 'this_week'
   ) {
 
     const d =
-      new Date();
+      localDateFromString(
+        today
+      );
+
 
     const day =
-      Number(
-        Utilities.formatDate(
-          d,
-          CONFIG.TIMEZONE,
-          'u'
-        )
-      );
+      d.getDay();
+
+
+    const daysFromMonday =
+      day === 0
+        ? 6
+        : day - 1;
+
 
     d.setDate(
       d.getDate() -
-      (day - 1)
+      daysFromMonday
     );
+
 
     startDate =
       Utilities.formatDate(
@@ -4834,66 +6814,97 @@ function getReportDateRange(period) {
         'yyyy-MM-dd'
       );
 
-  } else if (
+  }
+
+  else if (
     period === 'this_month'
   ) {
 
     startDate =
       Utilities.formatDate(
         new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          1
+          todayDate.getFullYear(),
+          todayDate.getMonth(),
+          1,
+          12,
+          0,
+          0
         ),
         CONFIG.TIMEZONE,
         'yyyy-MM-dd'
       );
 
-  } else if (
+  }
+
+  else if (
     period === 'last_month'
   ) {
 
-    const d =
+    const firstOfCurrent =
       new Date(
-        now.getFullYear(),
-        now.getMonth() - 1,
-        1
-      );
-
-    startDate =
-      Utilities.formatDate(
-        d,
-        CONFIG.TIMEZONE,
-        'yyyy-MM-dd'
-      );
-
-    const last =
-      new Date(
-        now.getFullYear(),
-        now.getMonth(),
+        todayDate.getFullYear(),
+        todayDate.getMonth(),
+        1,
+        12,
+        0,
         0
       );
 
-    endDate =
+
+    const firstOfLast =
+      new Date(
+        todayDate.getFullYear(),
+        todayDate.getMonth() - 1,
+        1,
+        12,
+        0,
+        0
+      );
+
+
+    const lastOfLast =
+      new Date(
+        todayDate.getFullYear(),
+        todayDate.getMonth(),
+        0,
+        12,
+        0,
+        0
+      );
+
+
+    startDate =
       Utilities.formatDate(
-        last,
+        firstOfLast,
         CONFIG.TIMEZONE,
         'yyyy-MM-dd'
       );
 
-  } else if (
+
+    endDate =
+      Utilities.formatDate(
+        lastOfLast,
+        CONFIG.TIMEZONE,
+        'yyyy-MM-dd'
+      );
+
+  }
+
+  else if (
     period === 'last_7_days'
   ) {
 
     const d =
-      new Date(
-        now.getTime() -
-        6 *
-        24 *
-        60 *
-        60 *
-        1000
+      localDateFromString(
+        today
       );
+
+
+    d.setDate(
+      d.getDate() -
+      6
+    );
+
 
     startDate =
       Utilities.formatDate(
@@ -4902,19 +6913,23 @@ function getReportDateRange(period) {
         'yyyy-MM-dd'
       );
 
-  } else if (
+  }
+
+  else if (
     period === 'last_30_days'
   ) {
 
     const d =
-      new Date(
-        now.getTime() -
-        29 *
-        24 *
-        60 *
-        60 *
-        1000
+      localDateFromString(
+        today
       );
+
+
+    d.setDate(
+      d.getDate() -
+      29
+    );
+
 
     startDate =
       Utilities.formatDate(
@@ -4923,19 +6938,24 @@ function getReportDateRange(period) {
         'yyyy-MM-dd'
       );
 
-  } else {
+  }
+
+  else {
 
     startDate =
       '';
+
   }
 
 
   return {
+
     startDate:
       startDate,
 
     endDate:
       endDate
+
   };
 }
 
@@ -4953,6 +6973,7 @@ function filterByDateRange(
     return records;
   }
 
+
   return records.filter(
     function(record) {
 
@@ -4961,10 +6982,13 @@ function filterByDateRange(
           record[field]
         );
 
+
       return (
-        date >= range.startDate &&
-        date <= range.endDate
+        date >=
+          range.startDate &&
+        date <=
+          range.endDate
       );
-    }
-  );
+
+    });
 }
