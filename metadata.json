@@ -1,0 +1,7 @@
+{
+  "name": "DairyPulse",
+  "description": "Modern dairy farm business intelligence and management system",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
